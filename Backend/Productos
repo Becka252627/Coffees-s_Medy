@@ -1,0 +1,22 @@
+app.get('/productos', async (req, res) => {
+  try {
+    const pool = await sql.connect(config);
+    const result = await pool.request().query(`
+      SELECT 
+        p.Id_producto,
+        p.Nombre,
+        p.Precio,
+        p.Stock,
+        i.Img_Url AS Imagen,
+        c.Nombre AS Categoria
+      FROM Producto p
+      INNER JOIN Imagen i ON p.Id_Imagen = i.Id_Imagen
+      INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('Error al obtener productos:', err);
+    res.status(500).send('Error del servidor');
+  }
+});
