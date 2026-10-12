@@ -1,0 +1,83 @@
+body {
+  background: #f5f5f5;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 20px;
+  color: #333;
+}
+
+h1 {
+  text-align: center;
+  color: black;
+  margin-bottom: 40px;
+}
+
+.voucher {
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+  margin-bottom: 40px;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  transition: all 0.3s ease-in-out;
+}
+
+.voucher p {
+  margin: 6px 0;
+  font-size: 16px;
+}
+
+.voucher table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.voucher th,
+.voucher td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  font-size: 15px;
+  text-align: center;
+}
+
+.voucher th {
+  background-color: #e8f5e9;
+  color: black;
+  font-weight: 600;
+}
+
+.voucher tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.total {
+  text-align: right;
+  margin-top: 20px;
+  font-size: 18px;
+  font-weight: bold;
+  color: black;
+  border-top: 2px solid #ccc;
+  padding-top: 10px;
+}
+
+/* Impresión */
+@media print {
+  body {
+    background: none;
+    padding: 0;
+  }
+
+  .voucher {
+    box-shadow: none;
+    border: none;
+    page-break-inside: avoid;
+  }
+
+  h1 {
+    display: none;
+  }
+}

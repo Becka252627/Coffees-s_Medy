@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+		<title>Coffees Medy</title>
+		<link rel="stylesheet" href="css/styles.css" />
+		<link rel="stylesheet" href="css/productos.css"/>
+		<link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	</head>
+	
+	<body>
+
+		<header>
+			<div class="container-hero">
+				<div class="container hero">
+					<div class="customer-support">
+						<i class="fa-solid fa-phone"></i>
+						<div class="content-customer-support">
+							<span class="text">Pedidos Directos</span>
+							<span class="number">505 5814-3904</span>
+						</div>
+					</div>
+
+					<div class="container-logo">
+						<i class="fa-solid fa-mug-saucer"></i>
+						<h1 class="logo"><a href="/">Coffees Medy</a></h1>
+					</div>
+
+					<div class="container-user">
+						<i class="fa-solid fa-user" id="userContainer" style="cursor: pointer;"></i>
+						<i class="fa-solid fa-basket-shopping" id="cart-icon"></i>
+                        
+						<div class="cart">
+                            <h2 class="cart-title">Tu Carrito</h2>
+
+                            <div class="cart-content">
+
+                            </div>
+
+                            <div class="total">
+                                <div class="total-title">Total</div>
+                                <div class="total-price">$0</div>
+                            </div>
+
+                            <button type="button" class="btn-comprar">Comprar Ahora</button>
+
+                            <i class='bx bxs-x-square' id="close-cart"></i>
+                        </div>
+					</div>
+				</div>
+			</div>
+
+			<div class="container-navbar">
+				<nav class="navbar container">
+					<i class="fa-solid fa-bars"></i>
+					<ul class="menu">
+						<li><a href="principal.html">Inicio</a></li>
+						<li><a href="quienessomos.html">Quienes somos</a></li>
+						<li><a href="frappes.html">Frappés</a></li>
+						<li><a href="calientes.html">Calientes</a></li>
+						<li><a href="blogs.html">Blogs</a></li>
+						<li><a href="#">Más</a>
+	                       <ul class="menu-vertical">
+		                       <li><a href="eventos.html">Próximos Eventos</a></li>
+		                       <li><a href="galeria.html">Galería</a></li>
+	                       </ul>
+                        </li>
+					</ul>
+
+					<!-- formulario de búsqueda -->
+					<form class="search-form">
+						<input type="search" placeholder="Buscar..." />
+						<button class="btn-search">
+							<i class="fa-solid fa-magnifying-glass"></i>
+						</button>
+					</form>
+				</nav>
+			</div>
+		</header>
+<!------------------------------------------------------------------------------------------------->
+		<section class="banner">
+			<div class="content-banner">
+				<p>Frappes de Calidad</p>
+				<h2>100% Café<br />Nicaragüense</h2>
+				<a href="#" id="Comprarahora">Comprar ahora</a>
+			</div>
+		</section>
+
+		<main class="main-content">
+			<section class="container container-features">
+				<div class="card-feature" onclick="irADelivery()">
+					<i class="fa-solid fa-motorcycle"></i>
+					<div class="feature-content">
+						<span>Delivery</span>
+						<p>Zonas de Entregas</p>
+					</div>
+				</div>
+				<div class="card-feature" onclick="irAProductos()">
+					<i class="fa-solid fa-mug-saucer"></i>
+					<div class="feature-content">
+						<span>Productos</span>
+						<p>100% Calidad Garantizada</p>
+					</div>
+				</div>
+				<div class="card-feature">
+					<i class="fa-solid fa-gift"></i>
+					<div class="feature-content">
+						<a href="descuentos.html">
+						<span>Descuentos Especiales</span>
+						<p>Ofrece descuentos en dias especiales como regalo</p>
+						</a>
+					</div>
+				</div>
+				
+			</section>
+
+			<section class="container top-categories">
+				
+				<!--<div class="container-categories">
+					<div class="card-category category-calientes">
+						<p>Calientes</p>
+						<span>Ver más</span>
+					</div>
+					<div class="card-category category-QS">
+						<p>Quienes Somos</p>
+						<span>Ver más</span>
+					</div>
+					<div class="card-category category-frappes">
+						<p>Frappés</p>
+						<span>Ver más</span>
+					</div>-->
+				</div>
+			</section>
+
+			<section class="container top-products">
+				<h1 class="heading-1">Productos Destacados</h1>
+
+				<div class="container-products">
+					<!-- Producto 1 -->
+					<div class="card-product">
+						<div class="container-img">
+							<img src="img/frappe caramelo.png" alt="Frappe de caramelo" />
+							<span class="discount">-13%</span>
+							<div class="button-group">
+								<span>
+									<i class="fa-regular fa-eye"></i>
+								</span>
+								<span>
+									<i class="fa-regular fa-heart"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-code-compare"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-card-product">
+							<div class="stars">
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-regular fa-star"></i>
+							</div>
+							<span class="add-cart">
+								<i class="fa-solid fa-basket-shopping"></i>
+							</span>
+							<h3>Frappé de Caramelo</h3>
+							<p class="price">C$150 <span>C$180</span></p>
+						</div>
+					</div>
+					<!-- Producto 2 -->
+					<div class="card-product">
+						<div class="container-img">
+							<img
+								src="img/frappe de moca.jpg"
+								alt="Cafe incafe-ingles.jpg"
+							/>
+							<span class="discount">-22%</span>
+							<div class="button-group">
+								<span>
+									<i class="fa-regular fa-eye"></i>
+								</span>
+								<span>
+									<i class="fa-regular fa-heart"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-code-compare"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-card-product">
+							<div class="stars">
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-regular fa-star"></i>
+								<i class="fa-regular fa-star"></i>
+							</div>
+							<h3>Frappé de Moca</h3>
+							<span class="add-cart">
+								<i class="fa-solid fa-basket-shopping"></i>
+							</span>
+							<p class="price">C$180 <span>C$200</span></p>
+						</div>
+					</div>
+					<!--  -->
+					<div class="card-product">
+						<div class="container-img">
+							<img
+								src="img/frappe de oreo.jpg"
+								alt="Frappé de Oreo"
+							/>
+							<div class="button-group">
+								<span>
+									<i class="fa-regular fa-eye"></i>
+								</span>
+								<span>
+									<i class="fa-regular fa-heart"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-code-compare"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-card-product">
+							<div class="stars">
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+							</div>
+							<h3>Cafe frappé de Oreo</h3>
+							<span class="add-cart">
+								<i class="fa-solid fa-basket-shopping"></i>
+							</span>
+							<p class="price">C$140</p>
+						</div>
+					</div>
+					<!--  -->
+					<div class="card-product">
+						<div class="container-img">
+							<img src="img/capuchino caliente.jpg" alt="Capuchino Caliente" />
+							<div class="button-group">
+								<span>
+									<i class="fa-regular fa-eye"></i>
+								</span>
+								<span>
+									<i class="fa-regular fa-heart"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-code-compare"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-card-product">
+							<div class="stars">
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-solid fa-star"></i>
+								<i class="fa-regular fa-star"></i>
+							</div>
+							<h3>Capuchino caliente</h3>
+							<span class="add-cart">
+								<i class="fa-solid fa-basket-shopping"></i>
+							</span>
+							<p class="price">C$120</p>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="gallery">
+				<img
+					src="img/gallery1.jpg"
+					alt="Gallery Img1"
+					class="gallery-img-1"
+				/><img
+					src="img/gallery2.jpg"
+					alt="Gallery Img2"
+					class="gallery-img-2"
+				/><img
+					src="img/gallery3.jpg"
+					alt="Gallery Img3"
+					class="gallery-img-3"
+				/><img
+					src="img/gallery4.jpg"
+					alt="Gallery Img4"
+					class="gallery-img-4"
+				/><img
+					src="img/gallery5.jpg"
+					alt="Gallery Img5"
+					class="gallery-img-5"
+				/>
+			</section>
+
+			
+
+			<section class="container blogs">
+				<h1 class="heading-1">Últimos Blogs</h1>
+
+				<div class="container-blogs">
+					<div class="card-blog">
+						<div class="container-img">
+							<img src="img/blog-1.jpg" alt="Imagen Blog 1" />
+							<div class="button-group-blog">
+								<span>
+									<i class="fa-solid fa-magnifying-glass"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-link"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-blog">
+							<h3>Café de Nicaragua y sus grandes sabores</h3>
+							<span>29 de septiembre, 2020</span>
+							<p>
+								El centro norte de Nicaragua es la zona más productiva en cuanto a café de todo el país, ya que en ella se 
+								encuentra la zona montañosa, así como las regiones de Jinotega y Matagalpa, características por su humedad y
+							    altura. El material volcánico que se ha depositado en esta zona ha enriquecido los suelos, haciéndolos ideales
+								para el cultivo del café. Asimismo, los caficultores de esta región han complementado la actividad agrícola con
+								el agroturismo,desarrollando la Ruta del Café.
+							</p>
+							<div class="btn-read-more">Leer más</div>
+						</div>
+					</div>
+					<div class="card-blog">
+						<div class="container-img">
+							<img src="img/blog-2.jpg" alt="Imagen Blog 2" />
+							<div class="button-group-blog">
+								<span>
+									<i class="fa-solid fa-magnifying-glass"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-link"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-blog">
+							<h3>Descubre el sabor del verdadero café nicaragüense</h3>
+							<span>30 Noviembre 2022</span>
+							<p>
+								Nicaragua, dentro de Centroamérica, se destaca como un país dedicado al cultivo de café. 
+								Lo que distingue al café de origen nicaragüense es su proceso de cultivo, colocándolo en 
+								una posición destacada entre los mejores productores de café del mundo.
+
+                                La mayoría de los cafetales del país crecen bajo la sombra de árboles, otorgando al café un dulzor y aroma frutal 
+                                distintivos que lo hacen inconfundible. Te aseguramos que te encantará esta experiencia única.
+
+                                Si buscas probar un café excepcional, el café de origen nicaragüense es la elección perfecta. 
+								Caracterizado por su suave brillo afrutado y tonos más altos que ofrecen sensaciones cítricas 
+								y florales, se diferencia de otros cafés centroamericanos que suelen tener matices más terrosos o chocolatosos.
+							</p>
+							<div class="btn-read-more">Leer más</div>
+						</div>
+					</div>
+					<div class="card-blog">
+						<div class="container-img">
+							<img src="img/recoleccion.jpg" alt="Imagen Blog 3" />
+							<div class="button-group-blog">
+								<span>
+									<i class="fa-solid fa-magnifying-glass"></i>
+								</span>
+								<span>
+									<i class="fa-solid fa-link"></i>
+								</span>
+							</div>
+						</div>
+						<div class="content-blog">
+							<h3>De las fincas Mierisch a tu taza: 
+							Conocé nuestro nuevo café de Nicaragua</h3>
+							<span>04 de Septiembre 2024</span>
+							<p>Las fincas Mierisch son unas de las productoras de café más reconocidas a 
+								nivel internacional,siendo ganadores de la Taza de la Excelencia en varias 
+								ocasiones.
+
+                          Desde 1908 la familia Mierisch trabaja en la industria del café, apostando siempre 
+						  por la mejor calidad de su producto. Iniciaron en su finca Las Lajas en la región de Matagalpa
+						y actualmente tienen un total de 9 fincas en Nicaragua, repartidas entre Matagalpa y Jinotega. 
+						  Además, desde 2011 se expandieron a Honduras y son propietarios de 3 prestigiosas fincas 
+						productoras de café en ese país.
+							</p>
+							<div class="btn-read-more">Leer más</div>
+						</div>
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<footer class="footer">
+			<div class="container container-footer">
+				<div class="menu-footer">
+					<div class="contact-info">
+						<p class="title-footer">Información de Contacto</p>
+						<ul>
+							<li>
+								Dirección: De donde fue la estatua Rene Shick , 1/2 C al lago.
+							</li>
+							<li>Teléfono: +505 5814-3904</li>
+							<li>Facebook:Coffees Medy</li>
+							<li>EmaiL: baristas@support.com</li>
+						</ul>
+						<div class="social-icons">
+							<span class="facebook">
+								<i class="fa-brands fa-facebook-f"></i>
+							</span>
+							
+							
+							<span class="instagram">
+								<i class="fa-brands fa-instagram"></i>
+							</span>
+						</div>
+					</div>
+
+					<div class="information">
+						<p class="title-footer">Información</p>
+						<ul>
+							<li><a href="#">Acerca de Nosotros</a></li>
+							<li><a href="#">Información Delivery</a></li>
+							<li><a href="#">Politicas de Privacidad</a></li>
+							<li><a href="#">Términos y condiciones</a></li>
+							<li><a href="#">Contactános</a></li>
+						</ul>
+					</div>
+
+					<div class="my-account">
+						<p class="title-footer">Mi cuenta</p>
+
+						<ul>
+							<li><a href="usuario.html">Mi cuenta</a></li>
+							<li><a href="#" id="link-historial">Historial de ordenes</a></li>
+							<li><a href="#">Lista de deseos</a></li>
+							
+							<li><a href="#">Reembolsos</a></li>
+						</ul>
+					</div>
+
+					
+				</div>
+
+				<div class="copyright">
+					<p>
+						El café es un bálsamo para el corazón y el espíritu &copy; 2025
+					</p>
+
+					<img src="img/payment.png" alt="Pagos">
+				</div>
+			</div>
+		</footer>
+
+		<script src="js/principal.js" ></script>
+		<script src="js/productos.js" ></script>
+		<script src="js/is_perfil.js" ></script>
+	</body>
+</html>

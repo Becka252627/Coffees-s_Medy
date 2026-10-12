@@ -1,0 +1,56 @@
+body {
+font-family: Arial, sans-serif;
+max-width: 800px;
+margin: 0 auto;
+padding: 20px;
+color: #333;
+}
+        
+.delivery-points {
+background-color: #f9f9f9;
+border-radius: 8px;
+padding: 20px;
+margin-bottom: 30px;
+}
+        
+.delivery-points h2 {
+font-size: 20px;
+color: #2c3e50;
+margin-top: 0;
+margin-bottom: 15px;
+}
+        
+.delivery-points ul {
+list-style-type: none;
+padding-left: 0;
+}
+        
+.delivery-points h3 {
+padding: 8px 0;
+font-size: 16px;
+position: relative;
+padding-left: 25px;
+cursor: pointer;
+}
+
+.delivery-points h3:hover {
+color: #e74c3c;
+}
+        
+.delivery-points h3:before {
+color: #e74c3c;
+font-size: 20px;
+position: absolute;
+left: 0;
+top: 5px;
+}
+
+#map { 
+height: 400px; 
+width: 100%; }
+
+.lugar { 
+cursor: pointer; 
+color: blue; 
+text-decoration: underline; 
+}
