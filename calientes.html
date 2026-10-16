@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+		<title>Coffees Medy</title>
+		<link rel="stylesheet" href="css/calientes.css" />
+		<link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	</head>
+
+    <body>
+        <header>
+            <div class="container-hero">
+				<div class="container hero">
+					<div class="customer-support">
+						<i class="fa-solid fa-phone"></i>
+						<div class="content-customer-support">
+							<span class="text">Pedidos Directos</span>
+							<span class="number">505 5814-3904</span>
+						</div>
+					</div>
+
+					<div class="container-logo">
+						<i class="fa-solid fa-mug-saucer"></i>
+						<h1 class="logo"><a href="/">Coffees Medy</a></h1>
+					</div>
+
+					<div class="container-user">
+						<i class="fa-solid fa-user" id="userContainer" style="cursor: pointer;"></i>
+						<i class="fa-solid fa-basket-shopping" id="cart-icon"></i>
+                        
+						<div class="cart">
+                            <h2 class="cart-title">Tu Carrito</h2>
+
+                            <div class="cart-content">
+
+                            </div>
+
+                            <div class="total">
+                                <div class="total-title">Total</div>
+                                <div class="total-price">$0</div>
+                            </div>
+
+                            <button type="button" class="btn-comprar">Comprar Ahora</button>
+
+                            <i class='bx bxs-x-square' id="close-cart"></i>
+                        </div>
+					</div>
+				</div>
+			</div>
+
+			<div class="container-navbar">
+				<nav class="navbar container">
+					<i class="fa-solid fa-bars"></i>
+					<ul class="menu">
+						<li><a href="principal.html">Inicio</a></li>
+						<li><a href="quienessomos.html">Quienes somos</a></li>
+						<li><a href="frappes.html">Frappés</a></li>
+						<li><a href="calientes.html">Calientes</a></li>
+						<li><a href="blogs.html">Blogs</a></li>
+						<li><a href="#">Más</a>
+	                       <ul class="menu-vertical">
+		                       <li><a href="eventos.html">Próximos Eventos</a></li>
+		                       <li><a href="galeria.html">Galería</a></li>
+	                       </ul>
+                        </li>
+					</ul>
+
+					<!-- formulario de búsqueda -->
+					<form class="search-form">
+						<input type="search" placeholder="Buscar..." />
+						<button class="btn-search">
+							<i class="fa-solid fa-magnifying-glass"></i>
+						</button>
+					</form>
+				</nav>
+			</div>
+
+            <!--<div class="nav container">
+                <a href="#" class="logo">Frappés</a>
+
+                <i class='bx bx-shopping-bag' id="cart-icon"></i>
+
+                <div class="cart">
+                    <h2 class="cart-title">Tu Carrito</h2>
+
+                    <div class="cart-content">
+
+                    </div>
+
+                    <div class="total">
+                        <div class="total-title">Total</div>
+                        <div class="total-price">$0</div>
+                    </div>
+
+                    <button type="button" class="btn-comprar">Comprar Ahora</button>
+
+                    <i class='bx bxs-x-square' id="close-cart"></i>
+                </div>
+            </div>-->
+        </header>
+
+        <section class="shop container">
+            <h2 class="section-title">Bebidas Calientes</h2>
+
+            <div class="shop-content">
+                <!--Producto 1-->
+                <div class="product-box">
+                    <img src="img/cafe.jpg" alt="" class="product-img">
+                    <h2 class="product-title">Café de Grano</h2>
+                    <span class="price">$1</span>
+                    <i class='bx bx-shopping-bag add-cart'></i>
+                </div>
+
+                <!--Producto 2-->
+                <div class="product-box">
+                    <img src="img/capuchino caliente.jpg" alt="" class="product-img">
+                    <h2 class="product-title">Capuccino Caliente</h2>
+                    <span class="price">$3</span>
+                    <i class='bx bx-shopping-bag add-cart'></i>
+                </div>
+
+                <!--Producto 3-->
+                <div class="product-box">
+                    <img src="img/chocolate caliente.jpg" alt="" class="product-img">
+                    <h2 class="product-title">Chocolate Caliente</h2>
+                    <span class="price">$5</span>
+                    <i class='bx bx-shopping-bag add-cart'></i>
+                </div>
+            </div>
+        </section>
+        
+        <script src="js/productos.js"></script>
+        <script src="js/is_perfil.js"></script>
+
+    </body>
+</html>

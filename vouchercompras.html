@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mis Compras - Vouchers</title>
+  <link rel="stylesheet" href="css/voucher.css" />
+</head>
+<body>
+  <h1>🧾 Mis Vouchers</h1>
+  <div id="vouchers-container"></div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      const nombreUsuario = localStorage.getItem("nombreUsuario");
+
+      // if (!nombreUsuario) {
+      //   alert("⚠️ Debes iniciar sesión para ver tus compras.");
+      //   window.location.href = "login.html"; // Redirige si no ha iniciado sesión
+      //   return;
+      // }
+
+      try {
+        const res = await fetch(`/vouchers_compras?nombre=${encodeURIComponent(nombreUsuario)}`);
+        const vouchers = await res.json();
+
+        const container = document.getElementById("vouchers-container");
+
+        if (!vouchers || vouchers.length === 0) {
+          container.innerHTML = "<p>No tienes compras registradas.</p>";
+          return;
+        }
+
+        let ventasAgrupadas = {};
+
+        vouchers.forEach(v => {
+          if (!ventasAgrupadas[v.Id_Venta]) {
+            ventasAgrupadas[v.Id_Venta] = {
+              productos: [],
+              total: v.Total,
+              fecha: v.Fecha_Venta,
+              Nombre: v.Nombre
+            };
+          }
+
+          ventasAgrupadas[v.Id_Venta].productos.push({
+            nombre: v.Producto,
+            cantidad: v.Cantidad,
+            precio: v.Precio_Unitario,
+            descuento: v.Descuento,
+            subtotal: v.Subtotal
+          });
+        });
+
+        for (const idVenta in ventasAgrupadas) {
+          const venta = ventasAgrupadas[idVenta];
+          const div = document.createElement("div");
+          div.classList.add("voucher");
+
+          div.innerHTML = `
+            <h3>🧾 Venta #${idVenta}</h3>
+            <p><strong>Cliente:</strong> ${venta.Nombre}</p>
+            <p><strong>Fecha:</strong> ${new Date(venta.fecha).toLocaleDateString()}</p>
+            <table border="1" cellpadding="5" cellspacing="0">
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio</th>
+                <th>Descuento</th>
+                <th>Subtotal</th>
+              </tr>
+              ${venta.productos.map(p => `
+                <tr>
+                  <td>${p.nombre}</td>
+                  <td>${p.cantidad}</td>
+                  <td>$${p.precio}</td>
+                  <td>$${p.descuento}</td>
+                  <td>$${p.subtotal}</td>
+                </tr>
+              `).join('')}
+            </table>
+            <p><strong>Total de la venta:</strong> $${venta.total}</p>
+            <hr>
+          `;
+          container.appendChild(div);
+        }
+
+      } catch (err) {
+        console.error("❌ Error al cargar los vouchers del usuario:", err);
+        alert("Error al mostrar tus compras.");
+      }
+    });
+  </script>
+</body>
+</html>
