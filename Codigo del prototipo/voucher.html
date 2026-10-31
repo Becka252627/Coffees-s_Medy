@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vouchers de Ventas (Admin)</title>
+  <link rel="stylesheet" href="css/voucher.css"/>
+</head>
+<body>
+  <h1>Vouchers de Ventas (Admin)</h1>
+
+  <input type="text" id="buscador-general" placeholder="Buscar por cliente, producto o ID de venta..." />
+  <input type="date" id="buscador-fecha" />
+
+  <div id="vouchers-container"></div>
+
+  <script>
+    let ventasOriginales = [];
+
+    // Función para cargar vouchers desde backend (todos los registros)
+    async function cargarVouchers() {
+      try {
+        const res = await fetch('/vouchers');
+        const datos = await res.json();
+
+        // Agrupar ventas por Id_Venta para estructurar detalles
+        const ventasMap = new Map();
+        datos.forEach(item => {
+          if (!ventasMap.has(item.Id_Venta)) {
+            ventasMap.set(item.Id_Venta, {
+              Id_Venta: item.Id_Venta,
+              Nombre: item.Nombre,
+              Fecha_Venta: item.Fecha_Venta,
+              Total: item.Total,
+              detalles: []
+            });
+          }
+          ventasMap.get(item.Id_Venta).detalles.push({
+            Producto: item.Producto,
+            Cantidad: item.Cantidad,
+            Precio_Unitario: item.Precio_Unitario,
+            Descuento: item.Descuento,
+            Subtotal: item.Subtotal
+          });
+        });
+
+        // Guardar para aplicar filtros luego
+        ventasOriginales = Array.from(ventasMap.values());
+
+        mostrarVouchers(ventasOriginales);
+      } catch (error) {
+        console.error('Error cargando vouchers:', error);
+        document.getElementById('vouchers-container').innerHTML = '<p>Error cargando vouchers.</p>';
+      }
+    }
+
+    // Función que muestra la lista de vouchers (puede recibir lista filtrada)
+    function mostrarVouchers(lista) {
+      const contenedor = document.getElementById('vouchers-container');
+      contenedor.innerHTML = '';
+
+      if (lista.length === 0) {
+        contenedor.innerHTML = '<p>No se encontraron vouchers.</p>';
+        return;
+      }
+
+      lista.forEach(venta => {
+        const div = document.createElement('div');
+        div.classList.add('voucher');
+
+        let html = `
+          <p><strong>ID Venta:</strong> ${venta.Id_Venta}</p>
+          <p><strong>Cliente:</strong> ${venta.Nombre}</p>
+          <p><strong>Fecha:</strong> ${new Date(venta.Fecha_Venta).toLocaleDateString()}</p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio Unitario</th>
+                <th>Descuento</th>
+                <th>Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        venta.detalles.forEach(d => {
+          html += `
+            <tr>
+              <td>${d.Producto}</td>
+              <td>${d.Cantidad}</td>
+              <td>C$ ${d.Precio_Unitario.toFixed(2)}</td>
+              <td>C$ ${d.Descuento.toFixed(2)}</td>
+              <td>C$ ${d.Subtotal.toFixed(2)}</td>
+            </tr>
+          `;
+        });
+
+        html += `
+            </tbody>
+          </table>
+          <p class="total">Total: C$ ${venta.Total.toFixed(2)}</p>
+        `;
+
+        div.innerHTML = html;
+        contenedor.appendChild(div);
+      });
+    }
+
+    // Función para aplicar filtros en tiempo real
+    function aplicarFiltros() {
+      const texto = document.getElementById('buscador-general').value.toLowerCase();
+      const fechaSeleccionada = document.getElementById('buscador-fecha').value;
+
+      const filtradas = ventasOriginales.filter(venta => {
+        const idMatch = venta.Id_Venta.toString().includes(texto);
+        const clienteMatch = venta.Nombre.toLowerCase().includes(texto);
+        const productoMatch = venta.detalles.some(d =>
+          d.Producto.toLowerCase().includes(texto)
+        );
+
+        const textoCoincide = idMatch || clienteMatch || productoMatch;
+
+        const fechaMatch = !fechaSeleccionada || venta.Fecha_Venta.startsWith(fechaSeleccionada);
+
+        return textoCoincide && fechaMatch;
+      });
+
+      mostrarVouchers(filtradas);
+    }
+
+    // Agregar eventos para filtro
+    document.getElementById('buscador-general').addEventListener('input', aplicarFiltros);
+    document.getElementById('buscador-fecha').addEventListener('change', aplicarFiltros);
+
+    // Cargar vouchers al iniciar
+    cargarVouchers();
+  </script>
+</body>
+</html>
