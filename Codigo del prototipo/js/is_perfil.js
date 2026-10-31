@@ -10,3 +10,4 @@ document.getElementById("userContainer").addEventListener("click", () => {
     window.location.href = "inicio.html";
     }
 });
+

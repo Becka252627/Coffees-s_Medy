@@ -1,0 +1,6 @@
+body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px;}
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #007bff; color: white; }
+    select, button { padding: 5px; }
+    button { cursor: pointer; }
