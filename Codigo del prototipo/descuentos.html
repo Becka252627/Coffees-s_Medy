@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+		<title>Super Descuentos</title>
+		<link rel="stylesheet" href="css/descuentos.css" />
+		<link rel="stylesheet" href="css/productos.css" />
+		<link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	
+	</head>
+
+    <body>
+
+            <div class="container-hero">
+				<div class="container hero">
+					<div class="customer-support">
+						<i class="fa-solid fa-phone"></i>
+						<div class="content-customer-support">
+							<span class="text">Pedidos Directos</span>
+							<span class="number">505 5814-3904</span>
+						</div>
+					</div>
+
+					<div class="container-logo">
+						<i class="fa-solid fa-mug-saucer"></i>
+						<h1 class="logo"><a href="/">Coffees Medy</a></h1>
+					</div>
+
+					<div class="container-user">
+						<i class="fa-solid fa-user" id="userContainer" style="cursor: pointer;"></i>
+						<i class="fa-solid fa-basket-shopping" id="cart-icon"></i>
+                        
+						<div class="cart">
+                            <h2 class="cart-title">Tu Carrito</h2>
+
+                            <div class="cart-content">
+
+                            </div>
+
+                            <div class="total">
+                                <div class="total-title">Total</div>
+                                <div class="total-price">$0</div>
+                            </div>
+
+                            <button type="button" class="btn-comprar">Comprar Ahora</button>
+
+                            <i class='bx bxs-x-square' id="close-cart"></i>
+                        </div>
+					</div>
+				</div>
+			</div>
+
+			<div class="container-navbar">
+				<nav class="navbar container">
+					<i class="fa-solid fa-bars"></i>
+					<ul class="menu">
+						<li><a href="principal.html">Inicio</a></li>
+						<li><a href="quienessomos.html">Quienes somos</a></li>
+						<li><a href="frappes.html">Frappés</a></li>
+						<li><a href="calientes.html">Calientes</a></li>
+						<li><a href="blogs.html">Blogs</a></li>
+						<li><a href="#">Más</a>
+	                       <ul class="menu-vertical">
+		                       <li><a href="eventos.html">Próximos Eventos</a></li>
+		                       <li><a href="galeria.html">Galería</a></li>
+	                       </ul>
+                        </li>
+					</ul>
+
+					<form class="search-form">
+						<input type="search" placeholder="Buscar..." />
+						<button class="btn-search">
+							<i class="fa-solid fa-magnifying-glass"></i>
+						</button>
+					</form>
+				</nav>
+			</div>
+
+        <section class="ofertas">
+            <h1><span>¡Los mejores</span> <span class="rojo">Descuentos</span> <span>por el dia del padre!</span></h1>
+    
+            <div class="productos" id="productos-container">
+
+                <div class="producto" >
+                      <img src="img/frappe de oreo.jpg" alt="">
+                    <div class="descuento">-20%</div>
+                    <h2>Frappes</h2>
+                    <p>Disfruta de un delicioso frappe de Oreo junto a tu papá con el 20% de descuento este 23 de junio.</p>
+
+                    <div class="precio">
+                        <span class="precio-final">$4</span>
+                        <span class="precio-original">$5</span>
+                    </div>
+                </div>
+
+                <div class="producto">
+                      <img src="img/chocoflan.jpg" alt="">
+                    <div class="descuento">-10%</div>
+                    <h2>Postres</h2>
+                    <p>Disfruta de un delicioso Chocoflan con la oferta de este mes. ¡No te lo pierdas!</p>
+                    
+                    <div class="precio">
+                        <span class="precio-final">$2.50</span>
+                        <span class="precio-original">$3</span>
+                    </div>
+                </div>
+
+                <div class="producto">
+                     <img src="img/desayuno tradicional.jpg" alt="">
+                    <div class="descuento">-50%</div>
+                    <h2>Desayunos</h2>
+                    <p>Aprovecha y ven a desayunar este 23 de junio con papá. <br>¡El mejor desayuno que probarás!</p>
+                    
+                    <div class="precio">
+                        <span class="precio-final">$1</span>
+                        <span class="precio-original">$2</span>
+                    </div>
+                </div>
+               
+            </div>
+
+        </section>
+
+    </main>
+
+		<footer class="footer">
+			<div class="container container-footer">
+				<div class="menu-footer">
+					<div class="contact-info">
+						<p class="title-footer">Información de Contacto</p>
+						<ul>
+							<li>
+								Dirección: De donde fue la estatua Rene Shick , 1/2 C al lago.
+							</li>
+							<li>WhatsApp: +505 5814-3904</li>
+							<li>Facebook: Coffees Medy</li>
+							<li>Email: baristas@support.com</li>
+						</ul>
+						<div class="social-icons">
+							<span class="facebook">
+                                <a href="https://www.facebook.com/profile.php?id=100064102593069&locale=es_LA"> 
+                                  <i class="fa-brands fa-facebook-f" style="cursor: pointer;"></i>
+                                </a>
+							</span>
+							
+							
+							<span class="instagram">
+                                <a href="https://www.instagram.com/coffeesmedy/">
+                                  <i class="fa-brands fa-instagram" style="cursor: pointer;"></i>
+                                </a>
+							</span>
+						</div>
+					</div>
+
+					<div class="information">
+						<p class="title-footer">Información</p>
+						<ul>
+							<li><a href="quienessomos.html">Acerca de Nosotros</a></li>
+							<li><a href="delivery.html">Información Delivery</a></li>
+						</ul>
+					</div>
+
+					<div class="my-account">
+						<p class="title-footer">Mi cuenta</p>
+
+						<ul>
+							<li><a href="#">Mi cuenta</a></li>
+							<li><a href="#">Historial de ordenes</a></li>
+							<li><a href="#">Lista de deseos</a></li>
+							
+							<li><a href="#">Reembolsos</a></li>
+						</ul>
+					</div>
+
+					
+				</div>
+
+				<div class="copyright">
+					<p>
+						El café es un bálsamo para el corazón y el espíritu &copy; 2025
+					</p>
+				</div>
+			</div>
+		</footer>
+
+		<script src="js/productos.js"></script>
+		<script src="js/is_perfil.js"></script>
+    </body>
+</html>
+
+<!--<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Super Descuentos</title>
+  <link rel="stylesheet" href="css/descuentos.css" />
+  <link rel="stylesheet" href="css/productos.css" />
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
+</head>
+
+<body>
+  <div class="container-hero">
+    <div class="container hero">
+      <div class="customer-support">
+        <i class="fa-solid fa-phone"></i>
+        <div class="content-customer-support">
+          <span class="text">Pedidos Directos</span>
+          <span class="number">505 5814-3904</span>
+        </div>
+      </div>
+
+      <div class="container-logo">
+        <i class="fa-solid fa-mug-saucer"></i>
+        <h1 class="logo"><a href="/">Coffees Medy</a></h1>
+      </div>
+
+      <div class="container-user">
+        <i class="fa-solid fa-user" id="userContainer" style="cursor: pointer;"></i>
+        <i class="fa-solid fa-basket-shopping" id="cart-icon" style="cursor: pointer;"></i>
+
+        <div class="cart">
+          <h2 class="cart-title">Tu Carrito</h2>
+
+          <div class="cart-content"></div>
+
+          <div class="total">
+            <div class="total-title">Total</div>
+            <div class="total-price">$0</div>
+          </div>
+
+          <button type="button" class="btn-comprar">Comprar Ahora</button>
+
+          <i class="bx bxs-x-square" id="close-cart" style="cursor: pointer;"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-navbar">
+    <nav class="navbar container">
+      <i class="fa-solid fa-bars"></i>
+      <ul class="menu">
+        <li><a href="principal.html">Inicio</a></li>
+        <li><a href="quienessomos.html">Quienes somos</a></li>
+        <li><a href="frappes.html">Frappés</a></li>
+        <li><a href="calientes.html">Calientes</a></li>
+        <li><a href="blogs.html">Blogs</a></li>
+        <li>
+          <a href="#">Más</a>
+          <ul class="menu-vertical">
+            <li><a href="eventos.html">Próximos Eventos</a></li>
+            <li><a href="galeria.html">Galería</a></li>
+          </ul>
+        </li>
+      </ul>
+
+      <form class="search-form">
+        <input type="search" placeholder="Buscar..." />
+        <button class="btn-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+      </form>
+    </nav>
+  </div>
+
+  <main>
+    <section class="ofertas container" id="seccion-descuentos"></section>
+  </main>
+
+  <footer class="footer">
+    <div class="container container-footer">
+      <div class="menu-footer">
+        <div class="contact-info">
+          <p class="title-footer">Información de Contacto</p>
+          <ul>
+            <li>Dirección: De donde fue la estatua Rene Shick , 1/2 C al lago.</li>
+            <li>WhatsApp: +505 5814-3904</li>
+            <li>Facebook: Coffees Medy</li>
+            <li>Email: baristas@support.com</li>
+          </ul>
+          <div class="social-icons">
+            <span class="facebook">
+              <a href="https://www.facebook.com/profile.php?id=100064102593069&locale=es_LA">
+                <i class="fa-brands fa-facebook-f" style="cursor: pointer;"></i>
+              </a>
+            </span>
+
+            <span class="instagram">
+              <a href="https://www.instagram.com/coffeesmedy/">
+                <i class="fa-brands fa-instagram" style="cursor: pointer;"></i>
+              </a>
+            </span>
+          </div>
+        </div>
+
+        <div class="information">
+          <p class="title-footer">Información</p>
+          <ul>
+            <li><a href="quienessomos.html">Acerca de Nosotros</a></li>
+            <li><a href="delivery.html">Información Delivery</a></li>
+          </ul>
+        </div>
+
+        <div class="my-account">
+          <p class="title-footer">Mi cuenta</p>
+          <ul>
+            <li><a href="#">Mi cuenta</a></li>
+            <li><a href="#">Historial de ordenes</a></li>
+            <li><a href="#">Lista de deseos</a></li>
+            <li><a href="#">Reembolsos</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="copyright">
+        <p>El café es un bálsamo para el corazón y el espíritu &copy; 2025</p>
+      </div>
+    </div>
+  </footer>
+
+  
+  <script src="js/descuentos.js"></script>
+  <script src="js/is_perfil.js"></script>
+</body>
+</html>-->
