@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+		<title>Perfil de Usuario</title>
+		<link rel="stylesheet" href="css/usuario.css" />
+		<link rel="stylesheet" href="css/productos.css" />
+		<link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	
+		
+    </head>
+
+    <div class="container-hero">
+				<div class="container hero">
+					<div class="customer-support">
+						<i class="fa-solid fa-phone"></i>
+						<div class="content-customer-support">
+							<span class="text">Pedidos Directos</span>
+							<span class="number">505 5814-3904</span>
+						</div>
+					</div>
+
+					<div class="container-logo">
+						<i class="fa-solid fa-mug-saucer"></i>
+						<h1 class="logo"><a href="/">Coffees Medy</a></h1>
+					</div>
+
+					<div class="container-user">
+						<i class="fa-solid fa-user" id="userContainer" style="cursor: pointer;"></i>
+						<i class="fa-solid fa-basket-shopping" id="cart-icon"></i>
+                        
+						<div class="cart">
+                            <h2 class="cart-title">Tu Carrito</h2>
+
+                            <div class="cart-content">
+
+                            </div>
+
+                            <div class="total">
+                                <div class="total-title">Total</div>
+                                <div class="total-price">$0</div>
+                            </div>
+
+                            <button type="button" class="btn-comprar">Comprar Ahora</button>
+
+                            <i class='bx bxs-x-square' id="close-cart"></i>
+                        </div>
+					</div>
+				</div>
+			</div>
+
+			<div class="container-navbar">
+				<nav class="navbar container">
+					<i class="fa-solid fa-bars"></i>
+					<ul class="menu">
+						<li><a href="principal.html">Inicio</a></li>
+						<li><a href="quienessomos.html">Quienes somos</a></li>
+						<li><a href="frappes.html">Frappés</a></li>
+						<li><a href="calientes.html">Calientes</a></li>
+						<li><a href="blogs.html">Blogs</a></li>
+						<li><a href="#">Más</a>
+	                       <ul class="menu-vertical">
+		                       <li><a href="eventos.html">Próximos Eventos</a></li>
+		                       <li><a href="galeria.html">Galería</a></li>
+	                       </ul>
+                        </li>
+					</ul>
+
+					<!-- formulario de búsqueda -->
+					<form class="search-form">
+						<input type="search" placeholder="Buscar..." />
+						<button class="btn-search">
+							<i class="fa-solid fa-magnifying-glass"></i>
+						</button>
+					</form>
+				</nav>
+			</div>
+
+    <section class="seccion-perfil-usuario">
+
+        <div class="perfil-usuario-header">
+            <div class="perfil-usuario-portada">
+                <div class="perfil-usuario-avatar">
+                    <img src="img/me.jpg" alt="img-avatar">
+
+                    <button type="button" class="boton-avatar">
+                        <i class='bx bx-image-alt'></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="perfil-usuario-body">
+            <div class="perfil-usuario-bio">
+                <h3 class="titulo" id="nombrePerfil">Nombre Usuario</h3>
+                <p class="texto" id="bioPerfil">Bienvenido a tu perfil de Coffees Medy.</p>
+            </div>
+
+            <div class="perfil-usuario-footer">
+                <ul class="lista-datos">
+                    <li><i class='bx bx-home-alt-2'></i>Inicio</li>
+                    <li><i class='bx bx-phone'></i>Telefono</li>
+                    <li><i class='bx bx-coffee-togo'></i>Favoritos</li>
+                    <li><i class='bx bx-user-pin' ></i>Contacto</li>
+                    <li><i class='bx bx-location-plus' ></i>Ubicacion</li>
+                    <li><i class='bx bxs-calendar' ></i>Proximos Eventos</li>
+                </ul>
+            </div>
+			<div id="admin-buttons" style="display: none; text-align: center; margin-top: 20px;">
+				<button id="btn-gestion-delivery">Gestión de Delivery</button>
+				<button id="btn-gestion-productos">Gestion de Productos</button>
+				<button id="btn-gestion-pedidos">Gestionar Pedidos</button>
+			</div>
+        </div>
+
+		<button id="btnCerrarSesion" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;"> Cerrar Sesión </button>
+
+    </section>
+
+
+	<script src="js/productos.js"></script>
+	<script>
+
+		document.addEventListener("DOMContentLoaded", () => {
+			const nombre = localStorage.getItem("nombreUsuario");
+			const correo = localStorage.getItem("correoUsuario");
+
+			 console.log("Nombre:", nombre); // ✅ Para ver si se guardó el nombre
+             console.log("Correo:", correo); // ✅ Para ver si se guardó el correo
+
+			if (!nombre || !correo) {
+				alert("⚠️ Debes iniciar sesión para ver tu perfil.");
+				window.location.href = "inicio.html";
+				return;
+			}
+
+			// Rellena el perfil
+			document.getElementById("nombrePerfil").textContent = nombre;
+			document.getElementById("bioPerfil").textContent = `¡Hola ${nombre}! Bienvenido a tu perfil en Coffees Medy.`;
+
+			// También puedes mostrar el correo en la lista de datos
+			const lista = document.querySelector(".lista-datos");
+			const correoLi = document.createElement("li");
+			correoLi.innerHTML = `<i class='bx bx-envelope'></i> ${correo}`;
+			lista.appendChild(correoLi);
+
+			if (usuario.nombre.toLowerCase() === "admin") {
+    return res.json({ success: true, nombre: usuario.nombre, email: usuario.email });
+}
+
+
+			if (nombre && nombre.toLowerCase() === "admin") {
+				document.getElementById("admin-buttons").style.display = "block";
+
+				// Puedes agregar listeners a los botones si quieres funcionalidad
+				document.getElementById("btn-gestion-delivery").addEventListener("click", () => {
+					window.location.href = "registrorepartidor.html";
+				});
+
+				document.getElementById("btn-gestion-productos").addEventListener("click", () => {
+					window.location.href = "registroprod.html";
+				});
+
+				document.getElementById("btn-gestion-pedidos").addEventListener("click", () => {
+					window.location.href = "pedidos.html"; // O la ruta de tu página de pedidos
+				});
+			}
+		});
+
+		document.getElementById("btnCerrarSesion").addEventListener("click", () => {
+			const usuario = localStorage.getItem("nombreUsuario");
+
+			if (usuario) {
+				//localStorage.removeItem(`carrito_${usuario}`); // 🧹 Limpia solo el carrito del usuario actual
+				localStorage.removeItem("nombreUsuario");      // 🧹 Elimina sesión del usuario
+				localStorage.removeItem("correoUsuario");
+			}
+
+			alert("Has cerrado sesión correctamente.");
+			window.location.href = "principal.html";
+		});
+	</script>
+</html>
