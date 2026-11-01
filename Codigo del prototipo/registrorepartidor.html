@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+    <title>Gestión de Repartidores</title>
+    <link rel="stylesheet" href="css/registrorepartidor.css" />
+
+    </head>
+
+    <body>
+
+        <h1>Gestión de Repartidores</h1>
+
+        <div class="formulario">
+
+            <input type="text" id="nombre" placeholder="Nombre del repartidor">       
+            <input type="text" id="identidad" placeholder="Cédula de identidad">
+            <input type="text" id="perfil" placeholder="URL de foto del repartidor">
+            <img id="previewImagen" src="" alt="Previsualización Imagen" style="max-width:150px; max-height:150px; display:none; margin-top:10px;">
+
+            <button id="btnGuardar" onclick="agregarRepartidor()">Agregar Nuevo Repartidor</button>
+        
+        </div>
+        
+        <div class="repartidores" id="listaRepartidores"></div>
+
+        <script src="js/registrorepartidor.js"></script>
+
+    </body>
+
+</html>
+
+
