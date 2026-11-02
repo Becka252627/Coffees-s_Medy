@@ -13,13 +13,24 @@ const app = express();
 app.use(express.json());
 app.use(express.static(__dirname)); // para servir el HTML y JS
 
-const config = {
+/*const config = {
   server: process.env.DB_SERVER,
   database: process.env.DB_DATABASE,
   options: {
     encrypt: false,
     trustServerCertificate: true
   }
+};*/
+const config = {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_SERVER || "sqlserver",
+    port: Number(process.env.DB_PORT || 1433),
+    database: process.env.DB_NAME || "DB_CoffeesMedy",
+    options: {
+        encrypt: false,
+        trustServerCertificate: true
+    }
 };
 
 
@@ -1228,6 +1239,11 @@ app.get('/confirmar', async (req, res) => {
 //------------Final
 
 
-app.listen(3000, () => {
-  console.log('Servidor en http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log(`Servidor ejecutándose en el puerto ${PORT}`);
 });
+/*app.listen(3000, () => {
+  console.log('Servidor en http://localhost:3000');
+});*/
