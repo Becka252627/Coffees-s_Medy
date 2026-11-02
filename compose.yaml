@@ -1,0 +1,44 @@
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: coffees-medy-sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?Configura DB_PASSWORD en .env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - coffees_medy_data:/var/opt/mssql
+    networks:
+      - coffees-medy-network
+
+  backend:
+    build:
+      context: "./Codigo del prototipo"
+      dockerfile: Dockerfile
+    container_name: coffees-medy-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_SERVER: sqlserver
+      DB_PORT: 1433
+      DB_NAME: DB_CoffeesMedy
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD:?Configura DB_PASSWORD en .env}
+    depends_on:
+      - sqlserver
+    networks:
+      - coffees-medy-network
+
+volumes:
+  coffees_medy_data:
+
+networks:
+  coffees-medy-network:
+    driver: bridge
