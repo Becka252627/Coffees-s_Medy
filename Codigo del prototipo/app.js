@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
-const sql = require('mssql/msnodesqlv8');
+//const sql = require('mssql/msnodesqlv8');//
+const sql = require('mssql');
 const path = require('path');
 
 const fs = require('fs');
@@ -13,6 +14,16 @@ const app = express();
 app.use(express.json());
 app.use(express.static(__dirname)); // para servir el HTML y JS
 
+/*const config = {
+  user: 'sa',
+  password: '12345',
+  server: 'DESKTOP-QS6K2CL',
+  database: 'DB_CoffeesMedy',
+  options: {
+    encrypt: false,
+    trustServerCertificate: true
+  }
+};*/
 /*const config = {
   server: process.env.DB_SERVER,
   database: process.env.DB_DATABASE,
@@ -258,7 +269,7 @@ app.get('/categorias', async (req, res) => {
 
 
 // Obtener productos con su imagen y nombre de categoría
-app.get('/productos', async (req, res) => {
+/*app.get('/productos', async (req, res) => {
   try {
     const pool = await sql.connect(config);
     const result = await pool.request().query(`
@@ -278,6 +289,38 @@ app.get('/productos', async (req, res) => {
   } catch (err) {
     console.error('❌ Error al obtener productos:', err);
     res.status(500).send('Error del servidor');
+  }
+});*/
+app.get('/productos', async (req, res) => {
+  try {
+    console.log("Entrando a /productos");
+
+    const pool = await sql.connect(config);
+
+    console.log("Conexión establecida");
+
+    const result = await pool.request().query(`
+      SELECT
+        p.Id_producto,
+        p.Nombre,
+        p.Precio,
+        p.Stock,
+        i.Img_Url AS Imagen,
+        c.Nombre AS Categoria
+      FROM Producto p
+      INNER JOIN Imagen i ON p.Id_Imagen = i.Id_Imagen
+      INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+    `);
+
+    console.log(result.recordset);
+
+    res.json(result.recordset);
+
+  } catch (err) {
+    console.error("ERROR COMPLETO:");
+    console.error(err);
+
+    res.status(500).send(err.message);
   }
 });
 

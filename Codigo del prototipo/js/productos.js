@@ -299,3 +299,77 @@ window.addEventListener("load", () => {
   // Cargar carrito visualmente
   cargarCarritoDesdeLocalStorage();
 });
+
+
+async function cargarProductos() {
+    const contenedor = document.querySelector('#seccion-productos');
+
+    try {
+        const respuesta = await fetch('/productos');
+
+        if (!respuesta.ok) {
+            throw new Error('Error al obtener los productos');
+        }
+
+        const productos = await respuesta.json();
+
+        console.log('Productos recibidos:', productos);
+
+        contenedor.innerHTML = '';
+
+        // Agrupar productos por categoría
+        const categorias = {};
+
+        productos.forEach(producto => {
+            if (!categorias[producto.Categoria]) {
+                categorias[producto.Categoria] = [];
+            }
+
+            categorias[producto.Categoria].push(producto);
+        });
+
+        // Crear cada sección de categoría
+        Object.keys(categorias).forEach(categoria => {
+
+            const titulo = document.createElement('h2');
+            titulo.classList.add('section-title');
+            titulo.textContent = categoria;
+
+            const shopContent = document.createElement('div');
+            shopContent.classList.add('shop-content');
+
+            categorias[categoria].forEach(producto => {
+
+                const tarjeta = document.createElement('div');
+                tarjeta.classList.add('product-box');
+
+                tarjeta.innerHTML = `
+                    <img src="${producto.Imagen}"
+                         alt="${producto.Nombre}"
+                         class="product-img">
+
+                    <h2 class="product-title">
+                        ${producto.Nombre}
+                    </h2>
+
+                    <span class="price">
+                        C$${producto.Precio}
+                    </span>
+
+                    <i class='bx bx-shopping-bag add-cart'></i>
+                `;
+
+                shopContent.appendChild(tarjeta);
+            });
+
+            contenedor.appendChild(titulo);
+            contenedor.appendChild(shopContent);
+        });
+
+    } catch (error) {
+        console.error('Error al cacrgar productos:', error);
+    }
+}
+
+// Cargar productos cuando se inicia la página
+document.addEventListener('DOMContentLoaded', cargarProductos);
