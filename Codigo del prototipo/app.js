@@ -1,60 +1,43 @@
 require('dotenv').config();
+
 const express = require('express');
-//const sql = require('mssql/msnodesqlv8');//
-const sql = require('mssql');
 const path = require('path');
-
-const fs = require('fs');
 const crypto = require('crypto');
-
-// const clave = process.env.SECRET_KEY;
-// console.log('Clave secreta:', clave);
+const { Pool } = require('pg');
+const nodemailer = require('nodemailer');
 
 const app = express();
-app.use(express.json());
-app.use(express.static(__dirname)); // para servir el HTML y JS
+const PORT = Number(process.env.PORT || 3000);
+const APP_URL = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
-/*const config = {
-  user: 'sa',
-  password: '12345',
-  server: 'DESKTOP-QS6K2CL',
-  database: 'DB_CoffeesMedy',
-  options: {
-    encrypt: false,
-    trustServerCertificate: true
-  }
-};*/
-/*const config = {
-  server: process.env.DB_SERVER,
-  database: process.env.DB_DATABASE,
-  options: {
-    encrypt: false,
-    trustServerCertificate: true
-  }
-};*/
-const config = {
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    server: process.env.DB_SERVER || "sqlserver",
-    port: Number(process.env.DB_PORT || 1433),
-    database: process.env.DB_NAME || "DB_CoffeesMedy",
-    options: {
-        encrypt: false,
-        trustServerCertificate: true
-    }
-};
-
-
-// Permitir archivos estáticos como CSS y JS
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
+// PostgreSQL: en Render se recomienda usar DATABASE_URL (Internal Database URL
+// si el servicio web y la base de datos están en la misma región).
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false },
+      max: Number(process.env.PGPOOL_MAX || 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    }
+  : {
+      host: process.env.PGHOST || 'localhost',
+      port: Number(process.env.PGPORT || 5432),
+      database: process.env.PGDATABASE || 'DB_CoffeesMedy',
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD,
+      ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
+      max: Number(process.env.PGPOOL_MAX || 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    };
 
-// Servir HTML
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'principal.html'));
-});
-
-const nodemailer = require('nodemailer');
+const pool = new Pool(poolConfig);
+pool.on('error', (err) => console.error('Error inesperado en el pool PostgreSQL:', err));
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -63,1229 +46,725 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS
   }
 });
-//--------------------------------------------------Repartidores
 
-// GET: obtener todos los repartidores con datos de la imagen
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function inTransaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      console.error('Error al revertir transacción:', rollbackError);
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function sendDbError(res, error, context) {
+  console.error(`${context}:`, error);
+  if (error instanceof HttpError) {
+    return res.status(error.status).json({ success: false, mensaje: error.message });
+  }
+  if (error.code === '23505') {
+    return res.status(409).json({ success: false, mensaje: 'Ya existe un registro con esos datos.' });
+  }
+  if (error.code === '23503') {
+    return res.status(409).json({ success: false, mensaje: 'No se puede completar la operación porque el registro está relacionado con otros datos.' });
+  }
+  if (error.code === '23514' || error.code === '22P02' || error.code === '22003') {
+    return res.status(400).json({ success: false, mensaje: 'Los datos enviados no son válidos.' });
+  }
+  return res.status(500).json({ success: false, mensaje: 'Error en el servidor o en la base de datos.' });
+}
+
+function parsePositiveInt(value) {
+  const number = Number.parseInt(value, 10);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function hashPassword(password) {
+  // Formato menor de 100 caracteres para ser compatible con columnas VARCHAR(100).
+  const salt = crypto.randomBytes(12).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 32).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+}
+
+function verifyPassword(password, storedPassword) {
+  if (typeof storedPassword !== 'string') return false;
+  if (storedPassword.startsWith('scrypt$')) {
+    const parts = storedPassword.split('$');
+    if (parts.length !== 3) return false;
+    const [, salt, storedHash] = parts;
+    const calculated = crypto.scryptSync(String(password), salt, 32);
+    const expected = Buffer.from(storedHash, 'hex');
+    return calculated.length === expected.length && crypto.timingSafeEqual(calculated, expected);
+  }
+  // Compatibilidad temporal con contraseñas antiguas que ya estaban guardadas
+  // en texto plano. Se convierten a hash al iniciar sesión correctamente.
+  const supplied = Buffer.from(String(password));
+  const stored = Buffer.from(storedPassword);
+  return supplied.length === stored.length && crypto.timingSafeEqual(supplied, stored);
+}
+
+async function insertCustomerUser(client, { nombre, email, contrasena, token }) {
+  // La estructura existente puede representar el rol mediante id_rol o rol.
+  // Se detecta la columna real para no depender de un nombre supuesto.
+  const columnResult = await client.query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'usuario'`
+  );
+  const columns = new Set(columnResult.rows.map(row => row.column_name));
+  const fields = ['nombre', 'email', 'contrasena'];
+  const values = [nombre, email, hashPassword(contrasena)];
+
+  if (columns.has('verificado')) {
+    fields.push('verificado');
+    values.push(false);
+  }
+  if (columns.has('tokenverificacion')) {
+    fields.push('tokenverificacion');
+    values.push(token);
+  }
+  if (columns.has('id_rol')) {
+    const roleColumnsResult = await client.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'rol'`
+    );
+    const roleColumns = new Set(roleColumnsResult.rows.map(row => row.column_name));
+    const roleNameColumn = ['nombre', 'rol', 'nombre_rol', 'descripcion'].find(column => roleColumns.has(column));
+    if (!roleColumns.has('id_rol') || !roleNameColumn) {
+      throw new Error('La tabla rol debe contener id_rol y una columna nombre/rol/nombre_rol/descripcion.');
+    }
+    const role = await client.query(
+      `SELECT id_rol FROM rol WHERE LOWER(${roleNameColumn}) = 'cliente' LIMIT 1`
+    );
+    if (!role.rowCount) throw new Error("No existe el rol 'Cliente' en la tabla rol.");
+    fields.push('id_rol');
+    values.push(role.rows[0].id_rol);
+  } else if (columns.has('rol')) {
+    fields.push('rol');
+    values.push('Cliente');
+  }
+
+  const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
+  await client.query(
+    `INSERT INTO usuario (${fields.join(', ')}) VALUES (${placeholders})`,
+    values
+  );
+}
+
+// Inicio
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'principal.html'));
+});
+
+// -----------------------------------------------------------------------------
+// REPARTIDORES
+// -----------------------------------------------------------------------------
 app.get('/repartidores', async (req, res) => {
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query(`
-      SELECT 
-        r.Id_Repartidor,
-        r.Nombre,
-        r.Cedula,
-        i.Img_Url AS Foto_Perfil
-      FROM Repartidor r
-      INNER JOIN Imagen i ON r.Id_Imagen = i.Id_Imagen
+    const result = await pool.query(`
+      SELECT
+        r.id_repartidor AS "Id_Repartidor",
+        r.nombre AS "Nombre",
+        r.cedula AS "Cedula",
+        i.img_url AS "Foto_Perfil",
+        r.fecha_nacimiento AS "Fecha_Nacimiento",
+        r.edad AS "Edad"
+      FROM vista_repartidor r
+      INNER JOIN imagen i ON i.id_imagen = r.id_imagen
+      ORDER BY r.id_repartidor
     `);
-
-    res.json(result.recordset);
-  } catch (err) {
-    console.error('❌ Error al obtener repartidores:', err);
-    res.status(500).send('Error del servidor');
+    res.json(result.rows);
+  } catch (error) {
+    sendDbError(res, error, 'Error al obtener repartidores');
   }
 });
 
-
-
-// POST: agregar un repartidor nuevo
 app.post('/agregarrepartidores', async (req, res) => {
   const { nombre, cedula, imagen } = req.body;
-
-  try {
-    const pool = await sql.connect(config);
-
-    // Insertar la imagen y obtener su ID
-    const resultImagen = await pool.request()
-      .input('Img_Url', sql.NVarChar(sql.MAX), imagen)
-      .query('INSERT INTO Imagen (Img_Url) OUTPUT INSERTED.Id_Imagen VALUES (@Img_Url)');
-
-    const idImagen = resultImagen.recordset[0].Id_Imagen;
-
-    // Insertar el repartidor
-    await pool.request()
-      .input('Nombre', sql.NVarChar(100), nombre)
-      .input('Cedula', sql.NVarChar(16), cedula)
-      .input('Id_Imagen', sql.Int, idImagen)
-      .query(`
-        INSERT INTO Repartidor (Nombre, Cedula, Id_Imagen)
-        VALUES (@Nombre, @Cedula, @Id_Imagen)
-      `);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Error al agregar repartidor:', err);
-    res.status(500).json({ success: false, mensaje: 'Error al insertar en la base de datos' });
+  if (!nombre || !cedula || !imagen) {
+    return res.status(400).json({ success: false, mensaje: 'Nombre, cédula e imagen son obligatorios.' });
   }
-});
-
-
-
-// PUT: editar repartidor por id
-app.put('/editarrepartidor/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
-  const { nombre, cedula, imagen } = req.body;
-
   try {
-    const pool = await sql.connect(config);
-
-    // Obtener el Id_Imagen actual del repartidor
-    const result = await pool.request()
-      .input('Id', sql.Int, id)
-      .query('SELECT Id_Imagen FROM Repartidor WHERE Id_Repartidor = @Id');
-
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ success: false, mensaje: 'Repartidor no encontrado' });
-    }
-
-    const idImagen = result.recordset[0].Id_Imagen;
-
-    // Actualizar la imagen
-    await pool.request()
-      .input('Id_Imagen', sql.Int, idImagen)
-      .input('Img_Url', sql.NVarChar(sql.MAX), imagen)
-      .query('UPDATE Imagen SET Img_Url = @Img_Url WHERE Id_Imagen = @Id_Imagen');
-
-    // Actualizar los datos del repartidor
-    await pool.request()
-      .input('Id', sql.Int, id)
-      .input('Nombre', sql.NVarChar(100), nombre)
-      .input('Cedula', sql.NVarChar(16), cedula)
-      .query(`
-        UPDATE Repartidor
-        SET Nombre = @Nombre,
-            Cedula = @Cedula
-        WHERE Id_Repartidor = @Id
-      `);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Error al editar repartidor:', err);
-    res.status(500).json({ success: false, mensaje: 'Error al actualizar en la base de datos' });
-  }
-});
-
-
-// DELETE: eliminar repartidor por id
-app.delete('/eliminarrepartidor/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
-
-  try {
-    const pool = await sql.connect(config);
-
-    // Obtener el Id_Imagen asociado al repartidor
-    const result = await pool.request()
-      .input('Id', sql.Int, id)
-      .query('SELECT Id_Imagen FROM Repartidor WHERE Id_Repartidor = @Id');
-
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ success: false, mensaje: 'Repartidor no encontrado' });
-    }
-
-    const idImagen = result.recordset[0].Id_Imagen;
-
-    // Eliminar el repartidor
-    await pool.request()
-      .input('Id', sql.Int, id)
-      .query('DELETE FROM Repartidor WHERE Id_Repartidor = @Id');
-
-    // Eliminar la imagen asociada
-    await pool.request()
-      .input('Id_Imagen', sql.Int, idImagen)
-      .query('DELETE FROM Imagen WHERE Id_Imagen = @Id_Imagen');
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Error al eliminar repartidor:', err);
-    res.status(500).json({ success: false, mensaje: 'Error al eliminar de la base de datos' });
-  }
-});
-
-//BACKEND PRODUCTOS
-// calcular total carrito
-
-app.get('/calcular-subtotal', async (req, res) => {
-  const { precio, cantidad } = req.query;
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Precio', sql.Decimal(10, 2), precio)
-      .input('Cantidad', sql.Int, cantidad)
-      .query('SELECT dbo.CalcularSubtotal(@Precio, @Cantidad) AS subtotal');
-
-    const subtotal = result.recordset[0].subtotal;
-    res.json({ subtotal });
+    const nuevo = await inTransaction(async client => {
+      const imageResult = await client.query(
+        'INSERT INTO imagen (img_url) VALUES ($1) RETURNING id_imagen', [imagen]
+      );
+      const result = await client.query(
+        `INSERT INTO repartidor (nombre, cedula, id_imagen)
+         VALUES ($1, $2, $3) RETURNING id_repartidor`,
+        [nombre, cedula, imageResult.rows[0].id_imagen]
+      );
+      return result.rows[0];
+    });
+    res.json({ success: true, idRepartidor: nuevo.id_repartidor });
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error en cálculo subtotal');
+    sendDbError(res, error, 'Error al agregar repartidor');
   }
 });
 
-//----------------------------------------------------
-//restar stock productos
-app.post('/restar-stock', async (req, res) => {
+app.put('/editarrepartidor/:id', async (req, res) => {
+  const id = parsePositiveInt(req.params.id);
+  const { nombre, cedula, imagen } = req.body;
+  if (!id) return res.status(400).json({ success: false, mensaje: 'Identificador inválido.' });
+  if (!nombre || !cedula) return res.status(400).json({ success: false, mensaje: 'Nombre y cédula son obligatorios.' });
+
   try {
-    const pool = await sql.connect(config);
-    const { productos } = req.body;
-
-    if (!productos || productos.length === 0) {
-      return res.status(400).json({ mensaje: "No hay productos" });
-    }
-
-    for (const p of productos) {
-      await pool.request()
-        .input('Nombre', sql.NVarChar(100), p.nombre)
-        .input('Cantidad', sql.Int, p.cantidad)
-        .query(`
-                    UPDATE Producto
-                    SET Stock = Stock - @Cantidad
-                    WHERE Nombre = @Nombre
-                `);
-    }
-
-    res.json({ mensaje: "Compra realizada correctamente" });
-  } catch (err) {
-    console.error("Error en /restar-stock:", err);
-    res.status(500).json({ mensaje: "Error al actualizar stock" });
+    await inTransaction(async client => {
+      const current = await client.query(
+        'SELECT id_imagen FROM repartidor WHERE id_repartidor = $1 FOR UPDATE', [id]
+      );
+      if (!current.rowCount) throw new HttpError(404, 'Repartidor no encontrado.');
+      if (imagen !== undefined && imagen !== null && imagen !== '') {
+        await client.query('UPDATE imagen SET img_url = $1 WHERE id_imagen = $2', [imagen, current.rows[0].id_imagen]);
+      }
+      await client.query(
+        'UPDATE repartidor SET nombre = $1, cedula = $2 WHERE id_repartidor = $3',
+        [nombre, cedula, id]
+      );
+    });
+    res.json({ success: true });
+  } catch (error) {
+    sendDbError(res, error, 'Error al editar repartidor');
   }
 });
 
-//-----------------------------------------------------------------------------------
+app.delete('/eliminarrepartidor/:id', async (req, res) => {
+  const id = parsePositiveInt(req.params.id);
+  if (!id) return res.status(400).json({ success: false, mensaje: 'Identificador inválido.' });
+  try {
+    await inTransaction(async client => {
+      const current = await client.query(
+        'SELECT id_imagen FROM repartidor WHERE id_repartidor = $1 FOR UPDATE', [id]
+      );
+      if (!current.rowCount) throw new HttpError(404, 'Repartidor no encontrado.');
+      await client.query('DELETE FROM repartidor WHERE id_repartidor = $1', [id]);
+      await client.query('DELETE FROM imagen WHERE id_imagen = $1', [current.rows[0].id_imagen]);
+    });
+    res.json({ success: true });
+  } catch (error) {
+    sendDbError(res, error, 'Error al eliminar repartidor');
+  }
+});
 
-//BACKEND REGISTRAR 
+// -----------------------------------------------------------------------------
+// PRODUCTOS, CATEGORÍAS E INVENTARIO
+// -----------------------------------------------------------------------------
+app.get('/calcular-subtotal', async (req, res) => {
+  const precio = Number(req.query.precio);
+  const cantidad = parsePositiveInt(req.query.cantidad);
+  if (!Number.isFinite(precio) || precio < 0 || !cantidad) {
+    return res.status(400).json({ success: false, mensaje: 'Precio o cantidad inválidos.' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT calcularsubtotal($1::numeric, $2::integer) AS subtotal', [precio, cantidad]
+    );
+    res.json({ subtotal: result.rows[0].subtotal });
+  } catch (error) {
+    sendDbError(res, error, 'Error al calcular subtotal');
+  }
+});
 
-//Categorias
+app.post('/restar-stock', async (req, res) => {
+  const { productos } = req.body;
+  if (!Array.isArray(productos) || productos.length === 0) {
+    return res.status(400).json({ mensaje: 'No hay productos.' });
+  }
+  try {
+    await inTransaction(async client => {
+      for (const item of productos) {
+        const cantidad = parsePositiveInt(item.cantidad);
+        if (!cantidad) throw new HttpError(400, `Cantidad inválida para ${item.nombre || item.idProducto}.`);
+        let result;
+        if (parsePositiveInt(item.idProducto)) {
+          result = await client.query(
+            `UPDATE producto SET stock = stock - $1
+             WHERE id_producto = $2 AND stock >= $1 RETURNING id_producto`,
+            [cantidad, Number(item.idProducto)]
+          );
+        } else if (item.nombre) {
+          result = await client.query(
+            `UPDATE producto SET stock = stock - $1
+             WHERE id_producto = (
+               SELECT id_producto FROM producto WHERE nombre = $2 ORDER BY id_producto LIMIT 1
+             ) AND stock >= $1 RETURNING id_producto`,
+            [cantidad, item.nombre]
+          );
+        } else {
+          throw new HttpError(400, 'Cada producto debe incluir idProducto o nombre.');
+        }
+        if (!result.rowCount) throw new HttpError(409, `Producto inexistente o stock insuficiente: ${item.nombre || item.idProducto}.`);
+      }
+    });
+    res.json({ mensaje: 'Compra realizada correctamente.' });
+  } catch (error) {
+    sendDbError(res, error, 'Error en /restar-stock');
+  }
+});
+
 app.get('/categorias', async (req, res) => {
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query('SELECT Id_Categoria, Nombre FROM Categoria');
-
-    res.json(result.recordset); // Devuelve un array de categorías
-  } catch (err) {
-    console.error("❌ Error al obtener categorías:", err);
-    res.status(500).json({ success: false, mensaje: 'Error al obtener categorías desde la base de datos' });
+    const result = await pool.query(
+      'SELECT id_categoria AS "Id_Categoria", nombre AS "Nombre" FROM categoria ORDER BY id_categoria'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    sendDbError(res, error, 'Error al obtener categorías');
   }
 });
 
-
-// Obtener productos con su imagen y nombre de categoría
-/*app.get('/productos', async (req, res) => {
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query(`
-      SELECT 
-        p.Id_producto,
-        p.Nombre,
-        p.Precio,
-        p.Stock,
-        i.Img_Url AS Imagen,
-        c.Nombre AS Categoria
-      FROM Producto p
-      INNER JOIN Imagen i ON p.Id_Imagen = i.Id_Imagen
-      INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
-    `);
-
-    res.json(result.recordset);
-  } catch (err) {
-    console.error('❌ Error al obtener productos:', err);
-    res.status(500).send('Error del servidor');
-  }
-});*/
 app.get('/productos', async (req, res) => {
   try {
-    console.log("Entrando a /productos");
-
-    const pool = await sql.connect(config);
-
-    console.log("Conexión establecida");
-
-    const result = await pool.request().query(`
+    const result = await pool.query(`
       SELECT
-        p.Id_producto,
-        p.Nombre,
-        p.Precio,
-        p.Stock,
-        i.Img_Url AS Imagen,
-        c.Nombre AS Categoria
-      FROM Producto p
-      INNER JOIN Imagen i ON p.Id_Imagen = i.Id_Imagen
-      INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+        p.id_producto AS "Id_producto",
+        p.nombre AS "Nombre",
+        p.precio AS "Precio",
+        p.stock AS "Stock",
+        i.img_url AS "Imagen",
+        c.nombre AS "Categoria"
+      FROM producto p
+      INNER JOIN imagen i ON i.id_imagen = p.id_imagen
+      INNER JOIN categoria c ON c.id_categoria = p.id_categoria
+      ORDER BY p.id_producto
     `);
-
-    console.log(result.recordset);
-
-    res.json(result.recordset);
-
-  } catch (err) {
-    console.error("ERROR COMPLETO:");
-    console.error(err);
-
-    res.status(500).send(err.message);
+    res.json(result.rows);
+  } catch (error) {
+    sendDbError(res, error, 'Error al obtener productos');
   }
 });
 
-
-// Ruta para agregar producto
 app.post('/agregarproductos', async (req, res) => {
   const { nombre, precio, categoria, imagen, stock } = req.body;
+  const price = Number(precio);
+  const stockNumber = Number(stock);
+  if (!nombre || !categoria || !imagen || !Number.isFinite(price) || price < 0 || !Number.isInteger(stockNumber) || stockNumber < 0) {
+    return res.status(400).json({ success: false, mensaje: 'Datos del producto incompletos o inválidos.' });
+  }
   try {
-    const pool = await sql.connect(config);
-
-    // 1. Obtener el Id_Categoria
-    const resultCategoria = await pool.request()
-      .input('NombreCategoria', sql.NVarChar(50), categoria)
-      .query('SELECT Id_Categoria FROM Categoria WHERE Nombre = @NombreCategoria');
-
-    if (resultCategoria.recordset.length === 0) {
-      return res.status(400).json({ success: false, mensaje: 'La categoría no existe en la base de datos' });
-    }
-
-    const idCategoria = resultCategoria.recordset[0].Id_Categoria;
-
-    // 2. Insertar imagen y obtener su ID
-    const resultImagen = await pool.request()
-      .input('Img_Url', sql.NVarChar(sql.MAX), imagen)
-      .query('INSERT INTO Imagen (Img_Url) OUTPUT INSERTED.Id_Imagen VALUES (@Img_Url)');
-
-    const idImagen = resultImagen.recordset[0].Id_Imagen;
-
-    // 3. Insertar producto
-    await pool.request()
-      .input('Nombre', sql.NVarChar(100), nombre)
-      .input('Precio', sql.Decimal(10, 2), precio)
-      .input('Stock', sql.Int, stock)
-      .input('Id_Imagen', sql.Int, idImagen)
-      .input('Id_Categoria', sql.Int, idCategoria)
-      .query(`
-        INSERT INTO Producto (Nombre, Precio, Stock, Id_Imagen, Id_Categoria)
-        VALUES (@Nombre, @Precio, @Stock, @Id_Imagen, @Id_Categoria)
-      `);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Error al insertar producto:', err);
-    res.status(500).json({ success: false, mensaje: 'Error al insertar en la base de datos' });
+    const idProducto = await inTransaction(async client => {
+      const category = await client.query('SELECT id_categoria FROM categoria WHERE nombre = $1', [categoria]);
+      if (!category.rowCount) throw new HttpError(400, 'La categoría no existe en la base de datos.');
+      const image = await client.query('INSERT INTO imagen (img_url) VALUES ($1) RETURNING id_imagen', [imagen]);
+      const product = await client.query(
+        `INSERT INTO producto (nombre, precio, stock, id_imagen, id_categoria)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id_producto`,
+        [nombre, price, stockNumber, image.rows[0].id_imagen, category.rows[0].id_categoria]
+      );
+      return product.rows[0].id_producto;
+    });
+    res.json({ success: true, idProducto });
+  } catch (error) {
+    sendDbError(res, error, 'Error al insertar producto');
   }
 });
 
-// Editar producto
 app.put('/editarproducto/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parsePositiveInt(req.params.id);
   const { nombre, precio, categoria, imagen, stock } = req.body;
-
+  const price = Number(precio);
+  const stockNumber = Number(stock);
+  if (!id) return res.status(400).json({ success: false, mensaje: 'Identificador inválido.' });
+  if (!nombre || !categoria || !Number.isFinite(price) || price < 0 || !Number.isInteger(stockNumber) || stockNumber < 0) {
+    return res.status(400).json({ success: false, mensaje: 'Datos del producto incompletos o inválidos.' });
+  }
   try {
-    const pool = await sql.connect(config);
-
-    // Obtener ID de la categoría
-    const resultCategoria = await pool.request()
-      .input('NombreCategoria', sql.NVarChar(50), categoria)
-      .query('SELECT Id_Categoria FROM Categoria WHERE Nombre = @NombreCategoria');
-
-    if (resultCategoria.recordset.length === 0) {
-      return res.status(400).json({ success: false, mensaje: 'Categoría no encontrada' });
-    }
-
-    const idCategoria = resultCategoria.recordset[0].Id_Categoria;
-
-    // Obtener Id_Imagen actual del producto
-    const result = await pool.request()
-      .input('Id', sql.Int, id)
-      .query('SELECT Id_Imagen FROM Producto WHERE Id_producto = @Id');
-
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ success: false, mensaje: 'Producto no encontrado' });
-    }
-
-    const idImagen = result.recordset[0].Id_Imagen;
-
-    // Actualizar la imagen
-    await pool.request()
-      .input('Id_Imagen', sql.Int, idImagen)
-      .input('Img_Url', sql.NVarChar(sql.MAX), imagen)
-      .query('UPDATE Imagen SET Img_Url = @Img_Url WHERE Id_Imagen = @Id_Imagen');
-
-    // Actualizar el producto
-    await pool.request()
-      .input('Id', sql.Int, id)
-      .input('Nombre', sql.NVarChar(100), nombre)
-      .input('Precio', sql.Decimal(10, 2), precio)
-      .input('Stock', sql.Int, stock)
-      .input('Id_Categoria', sql.Int, idCategoria)
-      .query(`
-        UPDATE Producto
-        SET Nombre = @Nombre,
-            Precio = @Precio,
-            Stock = @Stock,
-            Id_Categoria = @Id_Categoria
-        WHERE Id_producto = @Id
-      `);
-
+    await inTransaction(async client => {
+      const category = await client.query('SELECT id_categoria FROM categoria WHERE nombre = $1', [categoria]);
+      if (!category.rowCount) throw new HttpError(400, 'Categoría no encontrada.');
+      const current = await client.query('SELECT id_imagen FROM producto WHERE id_producto = $1 FOR UPDATE', [id]);
+      if (!current.rowCount) throw new HttpError(404, 'Producto no encontrado.');
+      if (imagen !== undefined && imagen !== null && imagen !== '') {
+        await client.query('UPDATE imagen SET img_url = $1 WHERE id_imagen = $2', [imagen, current.rows[0].id_imagen]);
+      }
+      await client.query(
+        `UPDATE producto SET nombre = $1, precio = $2, stock = $3, id_categoria = $4
+         WHERE id_producto = $5`,
+        [nombre, price, stockNumber, category.rows[0].id_categoria, id]
+      );
+    });
     res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Error al editar producto:", err);
-    res.status(500).json({ success: false, mensaje: "Error al actualizar en la base de datos" });
+  } catch (error) {
+    sendDbError(res, error, 'Error al editar producto');
   }
 });
 
-// Eliminar producto
 app.delete('/eliminarproducto/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
-
+  const id = parsePositiveInt(req.params.id);
+  if (!id) return res.status(400).json({ success: false, mensaje: 'Identificador inválido.' });
   try {
-    const pool = await sql.connect(config);
-
-    // Obtener Id_Imagen asociado al producto
-    const result = await pool.request()
-      .input('Id', sql.Int, id)
-      .query('SELECT Id_Imagen FROM Producto WHERE Id_producto = @Id');
-
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ success: false, mensaje: 'Producto no encontrado' });
-    }
-
-    const idImagen = result.recordset[0].Id_Imagen;
-
-    // Eliminar el producto
-    await pool.request()
-      .input('Id', sql.Int, id)
-      .query('DELETE FROM Producto WHERE Id_producto = @Id');
-
-    // Eliminar la imagen asociada
-    await pool.request()
-      .input('Id_Imagen', sql.Int, idImagen)
-      .query('DELETE FROM Imagen WHERE Id_Imagen = @Id_Imagen');
-
+    await inTransaction(async client => {
+      const current = await client.query('SELECT id_imagen FROM producto WHERE id_producto = $1 FOR UPDATE', [id]);
+      if (!current.rowCount) throw new HttpError(404, 'Producto no encontrado.');
+      await client.query('DELETE FROM producto WHERE id_producto = $1', [id]);
+      await client.query('DELETE FROM imagen WHERE id_imagen = $1', [current.rows[0].id_imagen]);
+    });
     res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Error al eliminar producto:", err);
-    res.status(500).json({ success: false, mensaje: "Error al eliminar de la base de datos" });
+  } catch (error) {
+    sendDbError(res, error, 'Error al eliminar producto');
   }
 });
 
-
-//-----------------------------------       Login      ------------------------------------------------
-/*app.post('/login', async (req, res) => {
-  const { email, contrasena } = req.body;
-
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .input('Contrasena', sql.NVarChar, contrasena)
-      .query(`SELECT * FROM Usuario WHERE Email = @Email AND Contrasena = @Contrasena`);
-
-    if (result.recordset.length > 0) {
-      const nombre = result.recordset[0].Nombre; // 👈 extraer el nombre
-      const emailu = result.recordset[0].Email;
-      res.json({
-        success: true,
-        mensaje: "Inicio de sesión exitoso",
-        nombre: nombre, // enviar nombre al frontend
-        email: emailu
-      });
-    } else {
-      res.json({ success: false, mensaje: "Correo o contraseña incorrectos" });
-    }
-
-  } catch (err) {
-    console.error("Error en login:", err);
-    res.status(500).json({ success: false, mensaje: "Error en el servidor" });
-  }
-});*/
-
+// -----------------------------------------------------------------------------
+// AUTENTICACIÓN Y USUARIOS
+// -----------------------------------------------------------------------------
 app.post('/login', async (req, res) => {
   const { email, contrasena } = req.body;
-
+  if (!email || !contrasena) return res.status(400).json({ success: false, mensaje: 'Correo y contraseña son obligatorios.' });
   try {
-    const pool = await sql.connect(config);
-
-    // Verificar si el usuario existe con ese correo
-    const usuarioResult = await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .query(`SELECT * FROM Usuario WHERE Email = @Email`);
-
-    if (usuarioResult.recordset.length === 0) {
-      // ❌ No existe ese email
-      return res.json({ success: false, mensaje: "Correo incorrecto o no registrado" });
+    const result = await pool.query(
+      'SELECT * FROM usuario WHERE LOWER(email) = LOWER($1) LIMIT 1', [email]
+    );
+    if (!result.rowCount) return res.json({ success: false, mensaje: 'Correo incorrecto o no registrado.' });
+    const usuario = result.rows[0];
+    if (!verifyPassword(contrasena, usuario.contrasena)) {
+      return res.json({ success: false, mensaje: 'Contraseña incorrecta.' });
     }
-
-    const usuario = usuarioResult.recordset[0];
-
-    if (usuario.Contrasena !== contrasena) {
-      // ❌ Contraseña incorrecta
-      return res.json({ success: false, mensaje: "Contraseña incorrecta" });
+    if (usuario.verificado === false || usuario.verificado === 0) {
+      return res.json({ success: false, mensaje: 'Tu cuenta no está verificada. Por favor revisa tu correo.' });
     }
-
-    if (usuario.Verificado !== true && usuario.Verificado !== 1) {
-      // ❌ Cuenta no verificada
-      return res.json({ success: false, mensaje: "Tu cuenta no está verificada. Por favor revisa tu correo." });
+    if (!String(usuario.contrasena).startsWith('scrypt$')) {
+      await pool.query('UPDATE usuario SET contrasena = $1 WHERE id_usuario = $2', [hashPassword(contrasena), usuario.id_usuario]);
     }
-
-    // ✅ Todo correcto
     return res.json({
       success: true,
-      mensaje: "Inicio de sesión exitoso",
-      nombre: usuario.Nombre,
-      email: usuario.Email
+      mensaje: 'Inicio de sesión exitoso',
+      nombre: usuario.nombre,
+      email: usuario.email
     });
-
-  } catch (err) {
-    console.error("Error en login:", err);
-    res.status(500).json({ success: false, mensaje: "Error en el servidor" });
+  } catch (error) {
+    sendDbError(res, error, 'Error en login');
   }
 });
 
-
-/*//Registrarse
 app.post('/registro', async (req, res) => {
   const { nombre, email, contrasena } = req.body;
-
   if (!nombre || !email || !contrasena) {
-    return res.json({ success: false, mensaje: "Campos incompletos" });
+    return res.status(400).json({ success: false, mensaje: 'Campos incompletos.' });
   }
-
+  if (String(contrasena).length < 8) {
+    return res.status(400).json({ success: false, mensaje: 'La contraseña debe tener al menos 8 caracteres.' });
+  }
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return res.status(500).json({ success: false, mensaje: 'Falta configurar EMAIL_USER y EMAIL_PASS en las variables de entorno.' });
+  }
+  const token = crypto.randomBytes(32).toString('hex');
   try {
-    const pool = await sql.connect(config);
+    const existing = await pool.query('SELECT 1 FROM usuario WHERE LOWER(email) = LOWER($1) LIMIT 1', [email]);
+    if (existing.rowCount) return res.status(409).json({ success: false, mensaje: 'Ese correo ya está registrado.' });
 
-    // Insertar usuario
-    await pool.request()
-      .input('Nombre', sql.NVarChar(100), nombre)
-      .input('Correo', sql.NVarChar(100), email)
-      .input('Contrasena', sql.NVarChar(100), contrasena)
-      .query(`INSERT INTO Usuario (Nombre, Email, Contrasena)
-              VALUES (@Nombre, @Correo, @Contrasena)`);
+    await inTransaction(client => insertCustomerUser(client, { nombre, email, contrasena, token }));
 
-    // ✅ Enviar directamente lo que recibimos del frontend
-    return res.json({
-      success: true,
-      mensaje: "Registro exitoso",
-      nombre: nombre,
-      email: email
-    });
-
-  } catch (err) {
-    console.error("❌ Error en /registro:", err);
-    return res.status(500).json({ success: false, mensaje: "Error en el servidor" });
-  }
-});*/
-
-
-//Registrarse
-app.post('/registro', async (req, res) => {
-  const { nombre, email, contrasena } = req.body;
-
-  console.log("Datos recibidos en /registro:", { nombre, email, contrasena }); 
-
-  if (!nombre || !email || !contrasena) {
-    return res.json({ success: false, mensaje: "Campos incompletos" });
-  }
-
-  try {
-    const pool = await sql.connect(config);
-    const token = crypto.randomBytes(32).toString('hex');
-
-    // Insertar usuario
-    console.log({ nombre, email, contrasena });
-    await pool.request()
-      .input('Nombre', sql.NVarChar(100), nombre)
-      .input('Email', sql.NVarChar(100), email)
-      .input('Contrasena', sql.NVarChar(100), contrasena)
-      .input('Token', sql.NVarChar(100), token)
-      .query(`INSERT INTO Usuario (Nombre, Email, Contrasena, Verificado, TokenVerificacion)
-              VALUES (@Nombre, @Email, @Contrasena, 0, @Token)`);
-
-    //enviar email
-    const url =  `http://localhost:3000/verificar?token=${token}&email=${encodeURIComponent(email)}`;
+    const url = `${APP_URL}/verificar?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
     await transporter.sendMail({
-      from:'melanyfer.san@gmail.com',
+      from: process.env.EMAIL_USER,
       to: email,
-      subject: 'Verifica tu cuenta',
-      html:`<h3>Hola ${nombre}.</h3><p>Haz clic en el siguiente enlace para verificar tu cuenta:</p><a href="${url}">Verificar cuenta</a>`
+      subject: 'Verifica tu cuenta de Coffees Medy',
+      html: `<h3>Hola ${String(nombre).replace(/[<>]/g, '')}.</h3><p>Haz clic en el siguiente enlace para verificar tu cuenta:</p><p><a href="${url}">Verificar cuenta</a></p>`
     });
 
-    // ✅ Enviar directamente lo que recibimos del frontend
-  return res.status(200).json({
-  success: true,
-  mensaje: "Registro exitoso",
-  nombre: nombre,
-  email: email
-    });
-
-  } catch (err) {
-    console.error("❌ Error en /registro:", err);
-    return res.status(500).json({ success: false, mensaje: `Error del servidor: ${err.message}` });
+    return res.status(200).json({ success: true, mensaje: 'Registro exitoso. Revisa tu correo para verificar la cuenta.', nombre, email });
+  } catch (error) {
+    sendDbError(res, error, 'Error en /registro');
   }
 });
 
 app.get('/verificar', async (req, res) => {
   const { token, email } = req.query;
-
-  if (!token || !email) {
-    return res.status(400).send("❌ Faltan datos para verificar.");
-  }
-
+  if (!token || !email) return res.status(400).send('Faltan datos para verificar.');
   try {
-    const pool = await sql.connect(config);
-
-    // Verificar si existe el usuario con ese token
-    const result = await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .input('Token', sql.NVarChar, token)
-      .query(`SELECT * FROM Usuario WHERE Email = @Email AND TokenVerificacion = @Token`);
-
-    if (result.recordset.length === 0) {
-      return res.send("❌ Verificación inválida o ya usada.");
-    }
-
-    // Actualizar usuario como verificado (usar el mismo pool.request() o crear uno nuevo)
-    await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .query(`UPDATE Usuario SET Verificado = 1, TokenVerificacion = NULL WHERE Email = @Email`);
-
-    return res.send("✅ Cuenta verificada correctamente. Ya puedes iniciar sesión.");
-
-  } catch (err) {
-    console.error("❌ Error detallado de verificación:", err);
-    res.status(500).send(`❌ Error del servidor: ${err.message}`);
+    const result = await pool.query(
+      `UPDATE usuario SET verificado = TRUE, tokenverificacion = NULL
+       WHERE LOWER(email) = LOWER($1) AND tokenverificacion = $2
+       RETURNING id_usuario`,
+      [email, token]
+    );
+    if (!result.rowCount) return res.status(400).send('Verificación inválida o ya utilizada.');
+    return res.send('Cuenta verificada correctamente. Ya puedes iniciar sesión.');
+  } catch (error) {
+    console.error('Error detallado de verificación:', error);
+    return res.status(500).send('Error del servidor al verificar la cuenta.');
   }
 });
-
-
-// POST: buscar usuario desde formulario de pago
 
 app.get('/buscar-usuario', async (req, res) => {
   const { nombre, email } = req.query;
-
+  if (!nombre || !email) return res.status(400).json({ idUsuario: null });
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Nombre', sql.NVarChar, nombre)
-      .input('Email', sql.NVarChar, email)
-      .query(`
-        SELECT Id_Usuario FROM Usuario
-        WHERE Nombre = @Nombre AND Email = @Email
-      `);
-
-    if (result.recordset.length > 0) {
-      res.json({ idUsuario: result.recordset[0].Id_Usuario });
-    } else {
-      res.json({ idUsuario: null });
-    }
-  } catch (err) {
-    console.error("❌ Error al buscar usuario:", err);
-    res.status(500).json({ idUsuario: null });
+    const result = await pool.query(
+      `SELECT id_usuario AS "Id_Usuario" FROM usuario
+       WHERE nombre = $1 AND LOWER(email) = LOWER($2) LIMIT 1`,
+      [nombre, email]
+    );
+    res.json({ idUsuario: result.rowCount ? result.rows[0].Id_Usuario : null });
+  } catch (error) {
+    sendDbError(res, error, 'Error al buscar usuario');
   }
 });
 
+app.get('/validar-nombre', async (req, res) => {
+  const nombre = req.query.nombre;
+  if (!nombre) return res.status(400).json({ existe: false });
+  try {
+    const result = await pool.query('SELECT COUNT(*)::int AS total FROM usuario WHERE LOWER(nombre) = LOWER($1)', [nombre]);
+    res.json({ existe: result.rows[0].total > 0 });
+  } catch (error) {
+    sendDbError(res, error, 'Error en /validar-nombre');
+  }
+});
 
+app.get('/validar-correo', async (req, res) => {
+  const email = req.query.email;
+  if (!email) return res.status(400).json({ existe: false });
+  try {
+    const result = await pool.query('SELECT COUNT(*)::int AS total FROM usuario WHERE LOWER(email) = LOWER($1)', [email]);
+    res.json({ existe: result.rows[0].total > 0 });
+  } catch (error) {
+    sendDbError(res, error, 'Error en /validar-correo');
+  }
+});
 
-//--------------------------------Ventas
-
+// -----------------------------------------------------------------------------
+// VENTAS Y VOUCHERS
+// -----------------------------------------------------------------------------
 app.post('/registrar-venta', async (req, res) => {
   const { productos, idUsuario } = req.body;
-
-  if (!productos || productos.length === 0 || !idUsuario) {
-    return res.status(400).json({ mensaje: "Faltan datos" });
+  const userId = parsePositiveInt(idUsuario);
+  if (!Array.isArray(productos) || productos.length === 0 || !userId) {
+    return res.status(400).json({ mensaje: 'Faltan datos para registrar la venta.' });
   }
-
   try {
-    const pool = await sql.connect(config);
-    const transaction = new sql.Transaction(pool);
-    await transaction.begin();
-    const request = new sql.Request(transaction);
-
-    let total = 0;
-
-    // Calcular total y obtener Id_Producto y Precio
-    for (const p of productos) {
-
-      const productRequest = new sql.Request(transaction);
-      const r = await productRequest
-        .input('Nombre', sql.NVarChar, p.nombre)
-        .query('SELECT Precio, Id_Producto FROM Producto WHERE Nombre = @Nombre');
-
-      if (r.recordset.length === 0) {
-        await transaction.rollback();
-        return res.status(400).json({ mensaje: `Producto no encontrado: ${p.nombre}` });
+    const idVenta = await inTransaction(async client => {
+      let total = 0;
+      const lineItems = [];
+      for (const item of productos) {
+        const cantidad = parsePositiveInt(item.cantidad);
+        const descuento = Number(item.descuento || 0);
+        if (!cantidad || !Number.isFinite(descuento) || descuento < 0) {
+          throw new HttpError(400, 'Cantidad o descuento inválido.');
+        }
+        let productResult;
+        if (parsePositiveInt(item.idProducto)) {
+          productResult = await client.query(
+            'SELECT id_producto, nombre, precio FROM producto WHERE id_producto = $1', [Number(item.idProducto)]
+          );
+        } else {
+          productResult = await client.query(
+            'SELECT id_producto, nombre, precio FROM producto WHERE nombre = $1 ORDER BY id_producto LIMIT 1', [item.nombre]
+          );
+        }
+        if (!productResult.rowCount) throw new HttpError(400, `Producto no encontrado: ${item.nombre || item.idProducto}.`);
+        const product = productResult.rows[0];
+        const subtotalResult = await client.query(
+          'SELECT calcularsubtotal($1::numeric, $2::integer) AS subtotal', [product.precio, cantidad]
+        );
+        const subtotal = Number(subtotalResult.rows[0].subtotal);
+        const totalResult = await client.query(
+          'SELECT calculartotal($1::numeric, $2::integer, $3::numeric) AS total',
+          [product.precio, cantidad, descuento]
+        );
+        total += Number(totalResult.rows[0].total);
+        lineItems.push({ idProducto: product.id_producto, cantidad, precio: product.precio, descuento, subtotal });
       }
 
-      const precio = r.recordset[0].Precio;
-      const idProducto = r.recordset[0].Id_Producto;
-
-      p.precio = precio;
-      p.idProducto = idProducto;
-      p.descuento = p.descuento || 0;
-
-      const totalResult = await new sql.Request(transaction)
-      .input('Precio', sql.Decimal(10, 2), precio)
-      .input('Cantidad', sql.Int, p.cantidad)
-      .input('Descuento', sql.Decimal(10, 2), p.descuento)
-      .query(`SELECT dbo.CalcularTotal(@Precio, @Cantidad, @Descuento) AS Total`);
-      total += totalResult.recordset[0].Total;
-    }
-
-    // Insertar en Venta
-    const venta = await request
-      .input('Id_Usuario', sql.Int, idUsuario)
-      .input('Fecha', sql.Date, new Date())
-      .input('Total', sql.Decimal(10, 2), total)
-      .query(`
-        INSERT INTO Venta (Id_Usuario, Fecha_Venta, Total)
-        OUTPUT INSERTED.Id_Venta
-        VALUES (@Id_Usuario, @Fecha, @Total)
-      `);
-
-    const idVenta = venta.recordset[0].Id_Venta;
-
-// Insertar en Detalle_Venta
-for (const p of productos) {
-  // Usar un nuevo request para cada cálculo
-  const calcRequest = new sql.Request(transaction);
-  const subtotalResult = await calcRequest
-    .input('Precio', sql.Decimal(10, 2), p.precio)
-    .input('Cantidad', sql.Int, p.cantidad)
-    .query(`SELECT dbo.CalcularSubtotal(@Precio, @Cantidad) AS Subtotal`);
-
-  subtotal = subtotalResult.recordset[0].Subtotal;
-
-  if (subtotal == null || isNaN(subtotal)) {
-  await transaction.rollback();
-  return res.status(400).json({ mensaje: "Error al calcular el subtotal." });
-}
-
-  // Nuevo request para el insert
-  const insertRequest = new sql.Request(transaction);
-  await insertRequest
-    .input('Id_Venta', sql.Int, idVenta)
-    .input('Id_Producto', sql.Int, p.idProducto)
-    .input('Cantidad', sql.Int, p.cantidad)
-    .input('Precio', sql.Decimal(10, 2), p.precio)
-    .input('Descuento', sql.Decimal(5, 2), p.descuento)
-    .input('Subtotal', sql.Decimal(10, 2), subtotal)
-    .query(`
-      INSERT INTO Detalle_Venta (Id_Venta, Id_Producto, Cantidad, Precio_Unitario, Descuento, Subtotal)
-      VALUES (@Id_Venta, @Id_Producto, @Cantidad, @Precio, @Descuento, @Subtotal)`
-    );
-}
-
-
-    await transaction.commit();
-
-    res.json({ success: true, mensaje: "Venta y detalle guardados correctamente." });
-
-  } catch (err) {
-    console.error("❌ Error al guardar venta:", err);
-    res.status(500).json({ success: false, mensaje: "Error al registrar la venta." });
+      const sale = await client.query(
+        `INSERT INTO venta (id_usuario, fecha_venta, total)
+         VALUES ($1, CURRENT_DATE, $2) RETURNING id_venta`,
+        [userId, total]
+      );
+      const saleId = sale.rows[0].id_venta;
+      for (const item of lineItems) {
+        await client.query(
+          `INSERT INTO detalle_venta
+             (id_venta, id_producto, cantidad, precio_unitario, descuento, subtotal)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [saleId, item.idProducto, item.cantidad, item.precio, item.descuento, item.subtotal]
+        );
+      }
+      return saleId;
+    });
+    res.json({ success: true, mensaje: 'Venta y detalle guardados correctamente.', idVenta });
+  } catch (error) {
+    sendDbError(res, error, 'Error al guardar venta');
   }
 });
 
-// ----------------------------------------Voucher
-/*app.get('/vouchers', async (req, res) => {
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query(`
-      SELECT 
-          V.Id_Venta,
-          C.NombreCompleto AS Cliente,
-          P.Nombre AS Producto,
-          DV.Cantidad,
-          DV.Precio_Unitario,
-          DV.Descuento,
-          DV.Subtotal,
-          V.Fecha_Venta,
-          V.Total
-      FROM Venta V
-      JOIN Cliente C ON V.Id_Cliente = C.Id_Cliente
-      JOIN Detalle_Venta DV ON V.Id_Venta = DV.Id_Venta
-      JOIN Producto P ON DV.Id_Producto = P.Id_Producto
-      
-    `);
-
-    if (usuario !== 'admin') {
-      query += ` WHERE C.Email = @usuario `;
-    }
-
-    query += ` ORDER BY V.Id_Venta`;
-
-    const request = pool.request();
-
-    if (usuario !== 'admin') {
-      request.input('usuario', sql.NVarChar, usuario);
-    }
-    res.json(result.recordset);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error en el servidor');
-  }
-});*/
+const voucherSelect = `
+  SELECT
+    v.id_venta AS "Id_Venta",
+    u.nombre AS "Nombre",
+    p.nombre AS "Producto",
+    dv.cantidad AS "Cantidad",
+    dv.precio_unitario AS "Precio_Unitario",
+    dv.descuento AS "Descuento",
+    dv.subtotal AS "Subtotal",
+    v.fecha_venta AS "Fecha_Venta",
+    v.total AS "Total"
+  FROM venta v
+  INNER JOIN usuario u ON u.id_usuario = v.id_usuario
+  INNER JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+  INNER JOIN producto p ON p.id_producto = dv.id_producto`;
 
 app.get('/vouchers', async (req, res) => {
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query(`
-      SELECT 
-          V.Id_Venta,
-          U.Nombre AS Nombre,
-          P.Nombre AS Producto,
-          DV.Cantidad,
-          DV.Precio_Unitario,
-          DV.Descuento,
-          DV.Subtotal,
-          V.Fecha_Venta,
-          V.Total
-      FROM Venta V
-      JOIN Usuario U ON V.Id_Usuario = U.Id_Usuario
-      JOIN Detalle_Venta DV ON V.Id_Venta = DV.Id_Venta
-      JOIN Producto P ON DV.Id_Producto = P.Id_Producto
-      ORDER BY V.Id_Venta`
-    );
-    res.json(result.recordset);
+    const result = await pool.query(`${voucherSelect} ORDER BY v.id_venta`);
+    res.json(result.rows);
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error en el servidor');
+    sendDbError(res, error, 'Error al obtener vouchers');
   }
 });
-
-//-----------------------voucher usuario
 
 app.get('/vouchers_compras', async (req, res) => {
-  const nombre = req.query.nombre;
-
+  const nombre = String(req.query.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ success: false, mensaje: 'Falta el nombre del usuario.' });
   try {
-    const pool = await sql.connect(config);
-
-    const result = await pool.request()
-      // Ponemos % para buscar coincidencias parciales
-      .input('Nombre', sql.NVarChar, `%${nombre.trim()}%`)
-      .query(`
-        SELECT 
-            V.Id_Venta,
-            U.Nombre AS Nombre,
-            P.Nombre AS Producto,
-            DV.Cantidad,
-            DV.Precio_Unitario,
-            DV.Descuento,
-            DV.Subtotal,
-            V.Fecha_Venta,
-            V.Total
-        FROM Venta V
-        JOIN Usuario U ON V.Id_Usuario = U.Id_Usuario
-        JOIN Detalle_Venta DV ON V.Id_Venta = DV.Id_Venta
-        JOIN Producto P ON DV.Id_Producto = P.Id_Producto
-        WHERE U.Nombre LIKE @Nombre
-        ORDER BY V.Id_Venta
-      `);
-
-    res.json(result.recordset);
+    const result = await pool.query(
+      `${voucherSelect} WHERE u.nombre ILIKE $1 ORDER BY v.id_venta`, [`%${nombre}%`]
+    );
+    res.json(result.rows);
   } catch (error) {
-    console.error("❌ Error en /vouchers_compras:", error);
-    res.status(500).send('Error en el servidor');
+    sendDbError(res, error, 'Error en /vouchers_compras');
   }
 });
 
-//-----------------------------------------------Cifrar
-
-const algorithm = 'aes-256-gcm';
-const secretKey = process.env.SECRET_KEY;
-
-// Función para cifrar (devuelve JSON-string)
-function cifrar(texto) {
-  const iv = crypto.randomBytes(16);
-  const key = crypto.scryptSync(secretKey, 'salt', 32);
-  const cipher = crypto.createCipheriv(algorithm, key, iv);
-
-  const encrypted = Buffer.concat([cipher.update(texto, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  return JSON.stringify({
-    iv: iv.toString('hex'),
-    contenido: encrypted.toString('hex'),
-    tag: tag.toString('hex')
+// -----------------------------------------------------------------------------
+// DATOS DE TARJETA: no se almacenan números completos ni CVV.
+// Se conserva la ruta para que el frontend reciba un mensaje explícito y pueda
+// retirar el antiguo flujo de guardar/recuperar datos de tarjetas.
+// -----------------------------------------------------------------------------
+app.post('/guardar-datos-cifrados', (req, res) => {
+  return res.status(410).json({
+    success: false,
+    mensaje: 'Por seguridad no almacenamos números completos de tarjeta ni CVV. Utiliza un proveedor de pagos que gestione los datos de tarjeta mediante tokenización.'
   });
-}
-
-// Función para descifrar (recibe JSON-string)
-function descifrar(jsonCifrado) {
-  try {
-    if (!jsonCifrado) return "";
-
-    const parsed = JSON.parse(jsonCifrado);
-    if (!parsed.iv || !parsed.contenido || !parsed.tag) return "";
-
-    const key = crypto.scryptSync(secretKey, 'salt', 32);
-    const decipher = crypto.createDecipheriv(algorithm, key, Buffer.from(parsed.iv, 'hex'));
-    decipher.setAuthTag(Buffer.from(parsed.tag, 'hex'));
-
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(parsed.contenido, 'hex')),
-      decipher.final()
-    ]);
-
-    return decrypted.toString('utf8');
-  } catch (err) {
-    console.error("❌ Error al descifrar:", err.message);
-    return "";
-  }
-}
-
-// Ruta para guardar datos cifrados (POST)
-app.post("/guardar-datos-cifrados", (req, res) => {
-  const {
-    nombre,
-    email,
-    nombreTarjeta,
-    numeroTarjeta,
-    mesExp,
-    cvv
-  } = req.body;
-
-  if (!nombre || !email || !nombreTarjeta || !numeroTarjeta || !mesExp || !cvv) {
-    return res.status(400).json({ success: false, mensaje: "Faltan datos para cifrar." });
-  }
-
-  try {
-    const datosCifrados = {
-      email, // guardamos sin cifrar para búsqueda
-      nombre: cifrar(nombre),
-      nombreTarjeta: cifrar(nombreTarjeta),
-      numeroTarjeta: cifrar(numeroTarjeta),
-      mesExp: cifrar(mesExp),
-      cvv: cifrar(cvv),
-      fecha: new Date().toISOString()
-    };
-
-    // Guardar línea JSON en archivo
-    fs.appendFileSync("datos_cifrados_pagos.txt", JSON.stringify(datosCifrados) + '\n');
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Error al guardar datos cifrados:", err);
-    res.status(500).json({ success: false, mensaje: "Error al guardar datos cifrados" });
-  }
 });
 
-// Ruta para obtener datos descifrados (GET)
 app.get('/obtener-datos-cifrados', (req, res) => {
-  const correo = req.query.email;
-
-  if (!correo) {
-    return res.status(400).json({ success: false, mensaje: "Falta parámetro email." });
-  }
-
-  try {
-    const lineas = fs.readFileSync('datos_cifrados_pagos.txt', 'utf-8')
-      .trim()
-      .split('\n')
-      .filter(linea => linea.trim() !== "")
-      .map(linea => {
-        try {
-          return JSON.parse(linea);
-        } catch (err) {
-          console.warn("❌ Línea corrupta ignorada:", linea);
-          return null;
-        }
-      })
-      .filter(entry => entry !== null)
-      .reverse();
-
-    const encontrados = lineas.find(entry => entry.email === correo);
-
-    if (!encontrados) return res.json({ success: false, mensaje: "No se encontraron datos" });
-
-    const camposUtiles = ['nombreTarjeta', 'numeroTarjeta', 'mesExp', 'cvv'];
-    const datosDescifrados = {};
-
-    camposUtiles.forEach(campo => {
-      if (encontrados[campo]) {
-        datosDescifrados[campo] = descifrar(encontrados[campo]);
-      }
-    });
-
-    res.json({ success: true, datos: datosDescifrados });
-
-  } catch (error) {
-    console.error("❌ Error al obtener datos cifrados:", error);
-    res.status(500).json({ success: false, mensaje: "Error al leer datos cifrados" });
-  }
+  return res.status(410).json({
+    success: false,
+    mensaje: 'La recuperación de datos de tarjeta fue deshabilitada por seguridad. No guardes ni solicites el CVV.'
+  });
 });
 
-
-
-//--------------------------------------Gestion pedidos
+// -----------------------------------------------------------------------------
+// PEDIDOS
+// -----------------------------------------------------------------------------
 app.post('/crear-pedido', async (req, res) => {
-  const { idUsuario, direccion, telefono, carrito } = req.body; // carrito: [{ idProducto, cantidad, precioUnitario }]
-
-  let pool;
-  let transaction;
-
+  const { idUsuario, direccion, telefono, carrito } = req.body;
+  const userId = parsePositiveInt(idUsuario);
+  if (!userId || !direccion || !telefono || !Array.isArray(carrito) || carrito.length === 0) {
+    return res.status(400).json({ success: false, mensaje: 'Datos del pedido incompletos.' });
+  }
   try {
-    pool = await sql.connect(config);
-
-    // Crear transacción sobre pool
-    transaction = new sql.Transaction(pool);
-    await transaction.begin();
-
-    // Crear request asociado a la transacción
-    const request = new sql.Request(transaction);
-
-    // Insertar pedido
-    const pedido = await request
-      .input('idUsuario', sql.Int, idUsuario)
-      .input('direccion', sql.NVarChar, direccion)
-      .input('telefono', sql.NVarChar, telefono)
-      .query(`
-        INSERT INTO Pedido (Id_Usuario, Direccion, Telefono, Estado)
-        OUTPUT INSERTED.Id_Pedido
-        VALUES (@idUsuario, @direccion, @telefono, 'Pendiente')
-      `);
-
-    const idPedido = pedido.recordset[0].Id_Pedido;
-
-    // Insertar detalles del pedido usando mismo request o crear nuevos requests para cada (mejor nuevos para evitar problemas)
-    for (const item of carrito) {
-    // Obtener precio desde la base de datos
-      const r = await new sql.Request(transaction)
-      .input('Nombre', sql.NVarChar, item.nombre)
-      .query('SELECT Id_Producto, Precio FROM Producto WHERE Nombre = @Nombre');
-      
-      if (r.recordset.length === 0) {
-        throw new Error(`Producto no encontrado: ${item.idProducto}`);
+    const idPedido = await inTransaction(async client => {
+      const pedido = await client.query(
+        `INSERT INTO pedido (id_usuario, direccion, telefono, estado)
+         VALUES ($1, $2, $3, 'Pendiente') RETURNING id_pedido`,
+        [userId, direccion, telefono]
+      );
+      const orderId = pedido.rows[0].id_pedido;
+      for (const item of carrito) {
+        const cantidad = parsePositiveInt(item.cantidad);
+        if (!cantidad) throw new HttpError(400, `Cantidad inválida: ${item.cantidad}.`);
+        let product;
+        if (parsePositiveInt(item.idProducto)) {
+          product = await client.query(
+            'SELECT id_producto, precio FROM producto WHERE id_producto = $1 FOR SHARE', [Number(item.idProducto)]
+          );
+        } else if (item.nombre) {
+          product = await client.query(
+            'SELECT id_producto, precio FROM producto WHERE nombre = $1 ORDER BY id_producto LIMIT 1 FOR SHARE', [item.nombre]
+          );
+        } else {
+          throw new HttpError(400, 'Cada artículo debe incluir idProducto o nombre.');
+        }
+        if (!product.rowCount) throw new HttpError(400, `Producto no encontrado: ${item.nombre || item.idProducto}.`);
+        const row = product.rows[0];
+        const subtotal = Number(row.precio) * cantidad;
+        await client.query(
+          `INSERT INTO detalle_pedido (id_pedido, id_producto, cantidad, precio_unitario, subtotal)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [orderId, row.id_producto, cantidad, row.precio, subtotal]
+        );
       }
-      
-      
-      const idProducto = r.recordset[0].Id_Producto;
-      const precioUnitario = r.recordset[0].Precio;
-      const cantidad = parseInt(item.cantidad);
-
-      if (isNaN(cantidad) || cantidad <= 0) {
-        throw new Error(`Cantidad inválida: ${item.cantidad}`);
-      }
-
-      const subtotal = cantidad * precioUnitario;
-
-      // Insertar detalle pedido con precio y subtotal limpios
-      const detailRequest = new sql.Request(transaction);
-      await detailRequest
-        .input('idPedido', sql.Int, idPedido)
-        .input('idProducto', sql.Int, idProducto)
-        .input('cantidad', sql.Int, cantidad)
-        .input('precio', sql.Decimal(10, 2), precioUnitario)
-        .input('subtotal', sql.Decimal(10, 2), subtotal)
-        .query(`
-          INSERT INTO Detalle_Pedido (Id_Pedido, Id_Producto, Cantidad, Precio_unitario, Subtotal)
-          VALUES (@idPedido, @idProducto, @cantidad, @precio, @subtotal)
-        `);
-    }
-
-
-
-    // Confirmar transacción antes de enviar respuesta
-    await transaction.commit();
-
-    res.json({ success: true, mensaje: 'Pedido creado con éxito', idPedido });
-
+      return orderId;
+    });
+    res.json({ success: true, mensaje: 'Pedido creado con éxito.', idPedido });
   } catch (error) {
-    if (transaction) await transaction.rollback();
-    console.error("❌ Error creando pedido:", error);
-    res.status(500).json({ success: false, mensaje: 'Error creando pedido' });
+    sendDbError(res, error, 'Error creando pedido');
   }
 });
-
 
 app.get('/pedidos', async (req, res) => {
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query(`
-      SELECT 
-        P.Id_Pedido,
-        U.Nombre AS Cliente,
-        R.Nombre AS Repartidor,
-        P.Direccion,
-        P.Telefono,
-        P.Fecha_pedido,
-        P.Estado
-      FROM Pedido P
-      JOIN Usuario U ON P.Id_Usuario = U.Id_Usuario
-      LEFT JOIN Repartidor R ON P.Id_Repartidor = R.Id_Repartidor
-      ORDER BY P.Id_Pedido DESC
+    const result = await pool.query(`
+      SELECT
+        p.id_pedido AS "Id_Pedido",
+        u.nombre AS "Cliente",
+        r.nombre AS "Repartidor",
+        p.direccion AS "Direccion",
+        p.telefono AS "Telefono",
+        p.fecha_pedido AS "Fecha_pedido",
+        p.estado AS "Estado"
+      FROM pedido p
+      INNER JOIN usuario u ON u.id_usuario = p.id_usuario
+      LEFT JOIN repartidor r ON r.id_repartidor = p.id_repartidor
+      ORDER BY p.id_pedido DESC
     `);
-    res.json(result.recordset);
+    res.json(result.rows);
   } catch (error) {
-    console.error("❌ Error obteniendo pedidos:", error);
-    res.status(500).send('Error en el servidor');
+    sendDbError(res, error, 'Error obteniendo pedidos');
   }
 });
 
 app.put('/actualizar-pedido', async (req, res) => {
   const { idPedido, idRepartidor, estado } = req.body;
-
+  const orderId = parsePositiveInt(idPedido);
+  const deliveryId = idRepartidor === null || idRepartidor === '' || Number(idRepartidor) === 0
+    ? null : parsePositiveInt(idRepartidor);
+  const allowedStates = ['Pendiente', 'Enviado', 'Entregado', 'Cancelado'];
+  if (!orderId || !allowedStates.includes(estado) || (idRepartidor && !deliveryId)) {
+    return res.status(400).json({ success: false, mensaje: 'Datos de actualización inválidos.' });
+  }
   try {
-    const pool = await sql.connect(config);
-    await pool.request()
-      .input('idPedido', sql.Int, idPedido)
-      .input('idRepartidor', sql.Int, idRepartidor)
-      .input('estado', sql.NVarChar, estado)
-      .query(`
-        UPDATE Pedido
-        SET Id_Repartidor = @idRepartidor,
-            Estado = @estado
-        WHERE Id_Pedido = @idPedido
-      `);
-
-    res.json({ success: true, mensaje: "Pedido actualizado" });
-
+    const result = await pool.query(
+      `UPDATE pedido SET id_repartidor = $1, estado = $2
+       WHERE id_pedido = $3 RETURNING id_pedido`,
+      [deliveryId, estado, orderId]
+    );
+    if (!result.rowCount) return res.status(404).json({ success: false, mensaje: 'Pedido no encontrado.' });
+    res.json({ success: true, mensaje: 'Pedido actualizado.' });
   } catch (error) {
-    console.error("❌ Error actualizando pedido:", error);
-    res.status(500).json({ success: false });
+    sendDbError(res, error, 'Error actualizando pedido');
   }
 });
 
-app.get('/repartidores', async (req, res) => {
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query('SELECT Id_Repartidor, Nombre FROM Repartidor');
-    res.json(result.recordset);
-  } catch (err) {
-    console.error('❌ Error cargando repartidores:', err);
-    res.status(500).send('Error al obtener repartidores');
-  }
+// -----------------------------------------------------------------------------
+// INICIO Y CIERRE
+// -----------------------------------------------------------------------------
+const server = app.listen(PORT, () => {
+  console.log(`Servidor ejecutándose en el puerto ${PORT}`);
 });
 
-
-// ----------------------
-// 🔎 Validar si el nombre ya existe
-// ----------------------
-app.get('/validar-nombre', async (req, res) => {
-  const nombre = req.query.nombre;
-
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Nombre', sql.NVarChar, nombre)
-      .query('SELECT COUNT(*) as total FROM Usuario WHERE Nombre = @Nombre');
-
-    const existe = result.recordset[0].total > 0;
-    res.json({ existe });
-  } catch (err) {
-    console.error("Error en /validar-nombre:", err);
-    res.status(500).json({ error: "Error al validar nombre" });
-  }
-});
-
-// ----------------------
-// 🔎 Validar si el correo ya existe
-// ----------------------
-app.get('/validar-correo', async (req, res) => {
-  const email = req.query.email;
-
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .query('SELECT COUNT(*) as total FROM Usuario WHERE Email = @Email');
-
-    const existe = result.recordset[0].total > 0;
-    res.json({ existe });
-  } catch (err) {
-    console.error("Error en /validar-correo:", err);
-    res.status(500).json({ error: "Error al validar correo" });
-  }
-});
-
-//-----------------Autenticacion de correo
-
-/*const { v4: uuidv4 } = require('uuid');
-const nodemailer = require('nodemailer');
-
-app.post('/registro-pendiente', async (req, res) => {
-  const { nombre, email, contrasena } = req.body;
-  const token = uuidv4();
-
-  try {
-    const pool = await sql.connect(config);
-
-    await pool.request()
-      .input('Nombre', sql.NVarChar, nombre)
-      .input('Email', sql.NVarChar, email)
-      .input('Contrasena', sql.NVarChar, contrasena)
-      .input('Token', sql.UniqueIdentifier, token)
-      .query(`
-        INSERT INTO UsuariosPendientes (Nombre, Email, Contrasena, TokenConfirmacion)
-        VALUES (@Nombre, @Email, @Contrasena, @Token)
-      `);
-
-    // Enviar email
-    const transporter = nodemailer.createTransport({
-      service: 'Gmail',
-      auth: {
-        user: 'tucorreo@gmail.com',
-        pass: 'tucontraseñaapp'
-      }
-    });
-
-    const link = `http://localhost:3000/confirmar?token=${token}`;
-
-    await transporter.sendMail({
-      to: email,
-      subject: 'Confirma tu correo electrónico',
-      html: `<p>Hola ${nombre}, haz clic <a href="${link}">aquí</a> para confirmar tu registro.</p>`
-    });
-
-    res.json({ success: true, mensaje: "Verifica tu correo electrónico." });
-
-  } catch (err) {
-    console.error("❌ Error en registro-pendiente:", err);
-    res.status(500).json({ success: false, mensaje: "Error al registrar." });
-  }
-});
-
-
-app.get('/confirmar', async (req, res) => {
-  const { email, token } = req.query;
-
-  try {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .input('Token', sql.NVarChar, token)
-      .query(`
-        SELECT * FROM UsuariosPendientes
-        WHERE Email = @Email AND Token = @Token AND FechaExpiracion > GETDATE()
-      `);
-
-    if (result.recordset.length === 0) {
-      return res.send("❌ Token inválido o expirado.");
-    }
-
-    const { Nombre, Contrasena } = result.recordset[0];
-
-    // Insertar en tabla Usuario
-    await pool.request()
-      .input('Nombre', sql.NVarChar, Nombre)
-      .input('Email', sql.NVarChar, email)
-      .input('Contrasena', sql.NVarChar, Contrasena)
-      .query(`INSERT INTO Usuario (Nombre, Email, Contrasena) VALUES (@Nombre, @Email, @Contrasena)`);
-
-    // Eliminar de UsuariosPendientes
-    await pool.request()
-      .input('Email', sql.NVarChar, email)
-      .query(`DELETE FROM UsuariosPendientes WHERE Email = @Email`);
-
-    res.send("✅ Correo confirmado correctamente. Ya puedes iniciar sesión.");
-  } catch (err) {
-    console.error("Error al confirmar:", err);
-    res.status(500).send("❌ Error al confirmar el correo.");
-  }
-});*/
-
-//------------Final
-
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-    console.log(`Servidor ejecutándose en el puerto ${PORT}`);
-});
-/*app.listen(3000, () => {
-  console.log('Servidor en http://localhost:3000');
-});*/
+async function shutdown() {
+  console.log('Cerrando servidor...');
+  server.close(async () => {
+    await pool.end();
+    process.exit(0);
+  });
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
