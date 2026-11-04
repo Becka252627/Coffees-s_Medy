@@ -118,9 +118,10 @@ function verifyPassword(password, storedPassword) {
 }
 
 
+
+
 async function insertCustomerUser(client, { nombre, email, contrasena, token }) {
 
-  // Buscar el rol Usuario
   const role = await client.query(
     `SELECT id_rol
      FROM rol
@@ -133,7 +134,6 @@ async function insertCustomerUser(client, { nombre, email, contrasena, token }) 
     throw new Error("No existe el rol 'Usuario' en la tabla rol.");
   }
 
-  // Insertar el usuario
   await client.query(
     `INSERT INTO usuario
       (nombre, email, contrasena, id_rol, tokenverificacion, verificado)
@@ -418,9 +418,9 @@ app.post('/login', async (req, res) => {
     if (!verifyPassword(contrasena, usuario.contrasena)) {
       return res.json({ success: false, mensaje: 'Contraseña incorrecta.' });
     }
-    if (usuario.verificado === false || usuario.verificado === 0) {
+    /*if (usuario.verificado === false || usuario.verificado === 0) {
       return res.json({ success: false, mensaje: 'Tu cuenta no está verificada. Por favor revisa tu correo.' });
-    }
+    }*/
     if (!String(usuario.contrasena).startsWith('scrypt$')) {
       await pool.query('UPDATE usuario SET contrasena = $1 WHERE id_usuario = $2', [hashPassword(contrasena), usuario.id_usuario]);
     }
@@ -434,6 +434,7 @@ app.post('/login', async (req, res) => {
     sendDbError(res, error, 'Error en login');
   }
 });
+
 
 
 app.post('/registro', async (req, res) => {
@@ -453,18 +454,11 @@ app.post('/registro', async (req, res) => {
     });
   }
 
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    return res.status(500).json({
-      success: false,
-      mensaje: 'Falta configurar EMAIL_USER y EMAIL_PASS en las variables de entorno.'
-    });
-  }
-
-  const token = crypto.randomBytes(32).toString('hex');
-
   try {
     const existing = await pool.query(
-      'SELECT 1 FROM usuario WHERE LOWER(email) = LOWER($1) LIMIT 1',
+      `SELECT 1 FROM usuario
+       WHERE LOWER(email) = LOWER($1)
+       LIMIT 1`,
       [email]
     );
 
@@ -475,35 +469,26 @@ app.post('/registro', async (req, res) => {
       });
     }
 
-    const url = `${APP_URL}/verificar?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
-
-    // Registrar al usuario una sola vez
     await inTransaction(async client => {
       await insertCustomerUser(client, {
         nombre,
         email,
         contrasena,
-        token
+        token: null
       });
-    });
 
-    // Enviar correo de verificación
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Verifica tu cuenta de Coffees Medy',
-      html: `
-        <h2>¡Bienvenido a Coffees Medy!</h2>
-        <h3>Hola ${String(nombre).replace(/[<>]/g, '')}.</h3>
-        <p>Gracias por registrarte.</p>
-        <p>Haz clic en el siguiente enlace para verificar tu cuenta:</p>
-        <p><a href="${url}">Verificar cuenta</a></p>
-      `
+      await client.query(
+        `UPDATE usuario
+         SET verificado = TRUE,
+             tokenverificacion = NULL
+         WHERE LOWER(email) = LOWER($1)`,
+        [email]
+      );
     });
 
     return res.status(201).json({
       success: true,
-      mensaje: 'Registro exitoso. Revisa tu correo para verificar la cuenta.',
+      mensaje: 'Registro exitoso. Ya puedes iniciar sesión.',
       nombre,
       email
     });
@@ -512,6 +497,7 @@ app.post('/registro', async (req, res) => {
     sendDbError(res, error, 'Error en /registro');
   }
 });
+
 
 
 app.get('/verificar', async (req, res) => {
