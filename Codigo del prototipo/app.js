@@ -547,7 +547,7 @@ app.get('/validar-correo', async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// VENTAS Y VOUCHERS Historial
+// VENTAS Y VOUCHERS
 // -----------------------------------------------------------------------------
 app.post('/registrar-venta', async (req, res) => {
   const { productos, idUsuario } = req.body;
