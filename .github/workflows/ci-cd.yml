@@ -1,92 +1,52 @@
-
-name: CI-CD Coffees Medy
+name: CI/CD Coffees Medy
 
 on:
   push:
     branches:
       - main
       - DOCKERCICD
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ghcr.io/becka252627/coffees-s_medy
 
 jobs:
-  build:
-    name: Construir y verificar Docker
+  build-and-push:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - name: Descargar codigo
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Construir imagen Docker
-        uses: docker/build-push-action@v6
-        with:
-          context: ./Codigo del prototipo
-          file: ./Codigo del prototipo/Dockerfile
-          load: true
-          tags: coffees-medy:test
-
-      - name: Iniciar contenedor
-        run: |
-          docker run -d --name coffees-medy-test \
-            -p 3000:3000 \
-            -e PORT=3000 \
-            coffees-medy:test
-
-      - name: Comprobar respuesta del backend
-        run: |
-          for i in {1..30}; do
-            if curl -fsS http://localhost:3000/; then
-              echo "Backend iniciado correctamente"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "El backend no respondió"
-          docker logs coffees-medy-test
-          exit 1
-
-      - name: Detener contenedor
-        if: always()
-        run: docker rm -f coffees-medy-test || true
-
       - name: Iniciar sesión en GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Preparar etiquetas
-        if: github.event_name != 'pull_request'
+      - name: Generar etiquetas
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
+            type=sha,format=short,prefix=sha-
             type=raw,value=latest
-            type=sha
 
-      - name: Publicar imagen en GHCR
-        if: github.event_name != 'pull_request'
+      - name: Construir y publicar imagen
         uses: docker/build-push-action@v6
         with:
-          context: ./Codigo del prototipo
-          file: ./Codigo del prototipo/Dockerfile
+          context: "./Codigo del prototipo"
+          file: "./Codigo del prototipo/Dockerfile"
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
