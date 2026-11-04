@@ -147,8 +147,16 @@ async function insertCustomerUser(client, { nombre, email, contrasena, token }) 
       throw new Error('La tabla rol debe contener id_rol y una columna nombre/rol/nombre_rol/descripcion.');
     }
     const role = await client.query(
-      `SELECT id_rol FROM rol WHERE LOWER(${roleNameColumn}) = 'cliente' LIMIT 1`
-    );
+  `SELECT id_rol
+   FROM rol
+   WHERE LOWER(tipo_rol) = LOWER($1)
+   LIMIT 1`,
+  ['Usuario']
+);
+
+if (!role.rowCount) {
+  throw new Error("No existe el rol 'Usuario' en la tabla rol.");
+}
     if (!role.rowCount) throw new Error("No existe el rol 'Cliente' en la tabla rol.");
     fields.push('id_rol');
     values.push(role.rows[0].id_rol);
@@ -458,9 +466,9 @@ app.post('/registro', async (req, res) => {
   if (String(contrasena).length < 8) {
     return res.status(400).json({ success: false, mensaje: 'La contraseña debe tener al menos 8 caracteres.' });
   }
-  /*if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     return res.status(500).json({ success: false, mensaje: 'Falta configurar EMAIL_USER y EMAIL_PASS en las variables de entorno.' });
-  }*/
+  }
   const token = crypto.randomBytes(32).toString('hex');
   try {
     const existing = await pool.query('SELECT 1 FROM usuario WHERE LOWER(email) = LOWER($1) LIMIT 1', [email]);
