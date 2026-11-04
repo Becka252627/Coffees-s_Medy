@@ -458,46 +458,84 @@ app.post('/login', async (req, res) => {
   }
 });
 
+
 app.post('/registro', async (req, res) => {
   const { nombre, email, contrasena } = req.body;
-  if (!nombre || !email || !contrasena) {
-    return res.status(400).json({ success: false, mensaje: 'Campos incompletos.' });
-  }
-  if (String(contrasena).length < 8) {
-    return res.status(400).json({ success: false, mensaje: 'La contraseña debe tener al menos 8 caracteres.' });
-  }
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    return res.status(500).json({ success: false, mensaje: 'Falta configurar EMAIL_USER y EMAIL_PASS en las variables de entorno.' });
-  }
-  const token = crypto.randomBytes(32).toString('hex');
-  try {
-    const existing = await pool.query('SELECT 1 FROM usuario WHERE LOWER(email) = LOWER($1) LIMIT 1', [email]);
-    if (existing.rowCount) return res.status(409).json({ success: false, mensaje: 'Ese correo ya está registrado.' });
 
-    /*await inTransaction(client => insertCustomerUser(client, { nombre, email, contrasena, token }));
+  if (!nombre || !email || !contrasena) {
+    return res.status(400).json({
+      success: false,
+      mensaje: 'Campos incompletos.'
+    });
+  }
+
+  if (String(contrasena).length < 8) {
+    return res.status(400).json({
+      success: false,
+      mensaje: 'La contraseña debe tener al menos 8 caracteres.'
+    });
+  }
+
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return res.status(500).json({
+      success: false,
+      mensaje: 'Falta configurar EMAIL_USER y EMAIL_PASS en las variables de entorno.'
+    });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+
+  try {
+    const existing = await pool.query(
+      'SELECT 1 FROM usuario WHERE LOWER(email) = LOWER($1) LIMIT 1',
+      [email]
+    );
+
+    if (existing.rowCount) {
+      return res.status(409).json({
+        success: false,
+        mensaje: 'Ese correo ya está registrado.'
+      });
+    }
 
     const url = `${APP_URL}/verificar?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+
+    // Registrar al usuario una sola vez
+    await inTransaction(async client => {
+      await insertCustomerUser(client, {
+        nombre,
+        email,
+        contrasena,
+        token
+      });
+    });
+
+    // Enviar correo de verificación
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Verifica tu cuenta de Coffees Medy',
-      html: `<h3>Hola ${String(nombre).replace(/[<>]/g, '')}.</h3><p>Haz clic en el siguiente enlace para verificar tu cuenta:</p><p><a href="${url}">Verificar cuenta</a></p>`
-    });*/
-    await inTransaction(async client => {
-  await insertCustomerUser(client, { nombre, email, contrasena, token });
+      html: `
+        <h2>¡Bienvenido a Coffees Medy!</h2>
+        <h3>Hola ${String(nombre).replace(/[<>]/g, '')}.</h3>
+        <p>Gracias por registrarte.</p>
+        <p>Haz clic en el siguiente enlace para verificar tu cuenta:</p>
+        <p><a href="${url}">Verificar cuenta</a></p>
+      `
+    });
 
-  // Verificar automáticamente la cuenta, sin enviar correo.
-  await client.query(
-    'UPDATE usuario SET verificado = TRUE WHERE LOWER(email) = LOWER($1)',
-    [email]
-  );
-});
+    return res.status(201).json({
+      success: true,
+      mensaje: 'Registro exitoso. Revisa tu correo para verificar la cuenta.',
+      nombre,
+      email
+    });
 
-    return res.status(200).json({ success: true, mensaje: 'Registro exitoso. Revisa tu correo para verificar la cuenta.', nombre, email });
   } catch (error) {
     sendDbError(res, error, 'Error en /registro');
   }
 });
+
 
 app.get('/verificar', async (req, res) => {
   const { token, email } = req.query;
