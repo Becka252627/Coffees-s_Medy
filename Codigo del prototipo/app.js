@@ -117,60 +117,37 @@ function verifyPassword(password, storedPassword) {
   return supplied.length === stored.length && crypto.timingSafeEqual(supplied, stored);
 }
 
+
 async function insertCustomerUser(client, { nombre, email, contrasena, token }) {
-  // La estructura existente puede representar el rol mediante id_rol o rol.
-  // Se detecta la columna real para no depender de un nombre supuesto.
-  const columnResult = await client.query(
-    `SELECT column_name FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = 'usuario'`
+
+  // Buscar el rol Usuario
+  const role = await client.query(
+    `SELECT id_rol
+     FROM rol
+     WHERE LOWER(tipo_rol) = LOWER($1)
+     LIMIT 1`,
+    ['Usuario']
   );
-  const columns = new Set(columnResult.rows.map(row => row.column_name));
-  const fields = ['nombre', 'email', 'contrasena'];
-  const values = [nombre, email, hashPassword(contrasena)];
 
-  if (columns.has('verificado')) {
-    fields.push('verificado');
-    values.push(false);
-  }
-  if (columns.has('tokenverificacion')) {
-    fields.push('tokenverificacion');
-    values.push(token);
-  }
-  if (columns.has('id_rol')) {
-    const roleColumnsResult = await client.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'rol'`
-    );
-    const roleColumns = new Set(roleColumnsResult.rows.map(row => row.column_name));
-    const roleNameColumn = ['nombre', 'rol', 'nombre_rol', 'descripcion'].find(column => roleColumns.has(column));
-    if (!roleColumns.has('id_rol') || !roleNameColumn) {
-      throw new Error('La tabla rol debe contener id_rol y una columna nombre/rol/nombre_rol/descripcion.');
-    }
-    const role = await client.query(
-  `SELECT id_rol
-   FROM rol
-   WHERE LOWER(tipo_rol) = LOWER($1)
-   LIMIT 1`,
-  ['Usuario']
-);
-
-if (!role.rowCount) {
-  throw new Error("No existe el rol 'Usuario' en la tabla rol.");
-}
-    if (!role.rowCount) throw new Error("No existe el rol 'Cliente' en la tabla rol.");
-    fields.push('id_rol');
-    values.push(role.rows[0].id_rol);
-  } else if (columns.has('rol')) {
-    fields.push('rol');
-    values.push('Cliente');
+  if (!role.rowCount) {
+    throw new Error("No existe el rol 'Usuario' en la tabla rol.");
   }
 
-  const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
+  // Insertar el usuario
   await client.query(
-    `INSERT INTO usuario (${fields.join(', ')}) VALUES (${placeholders})`,
-    values
+    `INSERT INTO usuario
+      (nombre, email, contrasena, id_rol, tokenverificacion, verificado)
+     VALUES ($1, $2, $3, $4, $5, FALSE)`,
+    [
+      nombre,
+      email,
+      hashPassword(contrasena),
+      role.rows[0].id_rol,
+      token
+    ]
   );
 }
+
 
 // Inicio
 app.get('/', (req, res) => {
